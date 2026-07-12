@@ -2,12 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { TituloSistema, Janela, Campo, Botao, Tabela, useToast, brl } from '@mercado/shared';
 import { api, auth } from './api.js';
 import Login from './Login.jsx';
+import Registro from './Registro.jsx';
+import Funcionarios from './Funcionarios.jsx';
 
 const FILIAIS = { par: 'Parnamirim', mac: 'Macaíba', nat: 'Natal' };
 const ABA_PRODUTOS = 'produtos';
 const ABA_MOV = 'movimentacoes';
 const ABA_VENDAS = 'vendas';
 const ABA_REPOSICAO = 'reposicao';
+const ABA_NFE = 'nfe';
+const ABA_FUNC = 'funcionarios';
 
 const FORM_VAZIO = { cod: '', nome: '', un: 'UN', grupo: '', custo: '', preco: '', precoMin: '', min: '' };
 
@@ -26,6 +30,10 @@ export default function App() {
   const [filtroFilial, setFiltroFilial] = useState('');
   const [vendas, setVendas] = useState([]);
   const [reposicao, setReposicao] = useState([]);
+  const [registrando, setRegistrando] = useState(false);
+  const [xmlNfe, setXmlNfe] = useState('');
+  const [filialNfe, setFilialNfe] = useState('par');
+  const [resultadoNfe, setResultadoNfe] = useState(null);
 
   const carregarProdutos = useCallback(async () => {
     try { setProdutos(await api(`/produtos?busca=${encodeURIComponent(busca)}`)); }
@@ -52,7 +60,18 @@ export default function App() {
   useEffect(() => { if (sessao && aba === ABA_VENDAS) carregarVendas(); }, [sessao, aba, carregarVendas]);
   useEffect(() => { if (sessao && aba === ABA_REPOSICAO) carregarReposicao(); }, [sessao, aba, carregarReposicao]);
 
-  if (!sessao) return <Login titulo="ESTOCAAÍ — GESTÃO DE ESTOQUE" aoEntrar={setSessao} />;
+  async function importarNfe(e) {
+    e.preventDefault();
+    try {
+      const r = await api('/nfe/entrada', { method: 'POST', body: { xmlNfe, filial: filialNfe } });
+      setResultadoNfe(r); setXmlNfe('');
+      toast(`NF-e importada: <b>${r.itens.length}</b> item(ns) | não encontrados: ${r.naoEncontrados.length}`);
+      carregarProdutos();
+    } catch (e) { toast(e.message); }
+  }
+
+  if (registrando) return <Registro aoRegistrar={(d) => { setSessao(d); setRegistrando(false); }} aoVoltar={() => setRegistrando(false)} />;
+  if (!sessao) return <Login titulo="ESTOCAAÍ — GESTÃO DE ESTOQUE" aoEntrar={setSessao} aoRegistrar={() => setRegistrando(true)} />;
 
   function abrirNovo() { setForm(FORM_VAZIO); setEditando({}); }
   function abrirEditar(p) {
@@ -102,8 +121,10 @@ export default function App() {
   const ABAS = [
     { id: ABA_PRODUTOS, label: '1-Produtos' },
     { id: ABA_MOV, label: '2-Movimentar' },
-    { id: ABA_VENDAS, label: '3-Vendas' },
-    { id: ABA_REPOSICAO, label: '4-Reposição' },
+    { id: ABA_NFE, label: '3-NF-e' },
+    { id: ABA_VENDAS, label: '4-Vendas' },
+    { id: ABA_REPOSICAO, label: '5-Reposição' },
+    { id: ABA_FUNC, label: '6-Funcionários' },
   ];
 
   return (
@@ -284,6 +305,62 @@ export default function App() {
             </div>
           </Janela>
         )}
+
+        {aba === ABA_NFE && (
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
+            <Janela titulo="Importar NF-e — entrada de estoque">
+              <form onSubmit={importarNfe}>
+                <Campo label="Filial de destino">
+                  <select value={filialNfe} onChange={(e) => setFilialNfe(e.target.value)}>
+                    {Object.entries(FILIAIS).map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+                  </select>
+                </Campo>
+                <Campo label="XML da NF-e (cole aqui)">
+                  <textarea value={xmlNfe} onChange={(e) => setXmlNfe(e.target.value)} required
+                    placeholder="<nfeProc>...</nfeProc>" rows={10}
+                    style={{ width: '100%', fontFamily: 'monospace', fontSize: 11, padding: 8, border: '1.5px solid var(--linha)', borderRadius: 6, background: 'var(--amarelo-bg)', resize: 'vertical' }} />
+                </Campo>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <Botao type="button" onClick={async () => {
+                    if (!xmlNfe) return toast('Cole o XML primeiro.');
+                    try {
+                      const r = await api('/nfe/validar', { method: 'POST', body: { xmlNfe } });
+                      setResultadoNfe({ ...r, preview: true });
+                    } catch (e) { toast(e.message); }
+                  }}>Pré-visualizar</Botao>
+                  <Botao primario type="submit">Importar e dar entrada</Botao>
+                </div>
+              </form>
+            </Janela>
+
+            <Janela titulo="Resultado da importação">
+              {!resultadoNfe && <div style={{ color: 'var(--cinza)', textAlign: 'center', padding: 30 }}>Cole um XML e clique em Pré-visualizar ou Importar.</div>}
+              {resultadoNfe && (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--cinza)', marginBottom: 8 }}>
+                    Chave: {resultadoNfe.chave || '—'}{resultadoNfe.preview && <b style={{ color: 'var(--azul)', marginLeft: 8 }}> [PRÉ-VISUALIZAÇÃO — não gravado]</b>}
+                  </div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Itens encontrados ({(resultadoNfe.itens || []).length}):</div>
+                  {(resultadoNfe.itens || []).map((i, idx) => (
+                    <div key={idx} style={{ fontSize: 12.5, padding: '4px 0', borderBottom: '1px solid var(--linha)' }}>
+                      <b>{i.produto || i.cProd}</b> — {i.nome || i.xProd} · {i.qtd} {resultadoNfe.preview ? '' : `→ saldo: ${i.novoSaldo}`}
+                    </div>
+                  ))}
+                  {(resultadoNfe.naoEncontrados || []).length > 0 && (
+                    <>
+                      <div style={{ fontWeight: 700, marginTop: 10, marginBottom: 6, color: 'var(--vermelho)' }}>Não encontrados no cadastro ({resultadoNfe.naoEncontrados.length}):</div>
+                      {resultadoNfe.naoEncontrados.map((i, idx) => (
+                        <div key={idx} style={{ fontSize: 12, padding: '3px 0', color: 'var(--vermelho)' }}>{i.cProd} — {i.xProd} ({i.qtd})</div>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </Janela>
+          </div>
+        )}
+
+        {aba === ABA_FUNC && <Funcionarios />}
 
         {aba === ABA_REPOSICAO && (
           <Janela titulo="Ponto de reposição — itens abaixo do mínimo">
