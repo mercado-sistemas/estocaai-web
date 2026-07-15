@@ -4,14 +4,17 @@ import { api, auth } from './api.js';
 import Login from './Login.jsx';
 import Registro from './Registro.jsx';
 import Funcionarios from './Funcionarios.jsx';
+import Precificar from './Precificar.jsx';
+import { validarForm, r } from './validar.js';
 
 const FILIAIS = { par: 'Parnamirim', mac: 'Macaíba', nat: 'Natal' };
-const ABA_PRODUTOS = 'produtos';
-const ABA_MOV = 'movimentacoes';
-const ABA_VENDAS = 'vendas';
-const ABA_REPOSICAO = 'reposicao';
-const ABA_NFE = 'nfe';
-const ABA_FUNC = 'funcionarios';
+const ABA_PRODUTOS   = 'produtos';
+const ABA_MOV        = 'movimentacoes';
+const ABA_VENDAS     = 'vendas';
+const ABA_REPOSICAO  = 'reposicao';
+const ABA_NFE        = 'nfe';
+const ABA_FUNC       = 'funcionarios';
+const ABA_PRECIFICAR = 'precificar';
 
 const FORM_VAZIO = { cod: '', nome: '', un: 'UN', grupo: '', custo: '', preco: '', precoMin: '', min: '' };
 
@@ -81,6 +84,14 @@ export default function App() {
 
   async function salvarProduto(e) {
     e.preventDefault();
+    const falhas = validarForm(form, {
+      cod:   [r.obrigatorio, r.minLen(1), r.maxLen(50)],
+      nome:  [r.obrigatorio, r.minLen(2), r.maxLen(255)],
+      preco: [r.obrigatorio, r.positivo],
+      custo: [r.naoNegativo],
+    });
+    if (falhas) return toast(Object.values(falhas)[0]);
+
     const body = { ...form, custo: Number(form.custo), preco: Number(form.preco), precoMin: Number(form.precoMin || form.preco), min: Number(form.min || 0) };
     try {
       if (editando?.id) {
@@ -106,6 +117,12 @@ export default function App() {
 
   async function registrarMov(e) {
     e.preventDefault();
+    const falhasMov = validarForm(mov, {
+      produtoId: [r.obrigatorio],
+      qtd:       [r.obrigatorio, r.positivo],
+      tipo:      [r.obrigatorio],
+    });
+    if (falhasMov) return toast(Object.values(falhasMov)[0]);
     try {
       await api('/movimentacoes', { method: 'POST', body: { ...mov, produtoId: Number(mov.produtoId), qtd: Number(mov.qtd) } });
       toast('Movimentação registrada.');
@@ -119,12 +136,13 @@ export default function App() {
   const setM = (k) => (e) => setMov({ ...mov, [k]: e.target.value });
 
   const ABAS = [
-    { id: ABA_PRODUTOS, label: '1-Produtos' },
-    { id: ABA_MOV, label: '2-Movimentar' },
-    { id: ABA_NFE, label: '3-NF-e' },
-    { id: ABA_VENDAS, label: '4-Vendas' },
-    { id: ABA_REPOSICAO, label: '5-Reposição' },
-    { id: ABA_FUNC, label: '6-Funcionários' },
+    { id: ABA_PRODUTOS,   label: '1-Produtos' },
+    { id: ABA_MOV,        label: '2-Movimentar' },
+    { id: ABA_NFE,        label: '3-NF-e' },
+    { id: ABA_VENDAS,     label: '4-Vendas' },
+    { id: ABA_REPOSICAO,  label: '5-Reposição' },
+    { id: ABA_FUNC,       label: '6-Funcionários' },
+    { id: ABA_PRECIFICAR, label: '7-Precificar' },
   ];
 
   return (
@@ -361,6 +379,12 @@ export default function App() {
         )}
 
         {aba === ABA_FUNC && <Funcionarios />}
+
+        {aba === ABA_PRECIFICAR && (
+          <div style={{ paddingBottom: 80 }}>
+            <Precificar sessao={sessao} />
+          </div>
+        )}
 
         {aba === ABA_REPOSICAO && (
           <Janela titulo="Ponto de reposição — itens abaixo do mínimo">
