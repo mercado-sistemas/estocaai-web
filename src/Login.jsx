@@ -23,7 +23,9 @@ export default function Login({ titulo, aoEntrar, aoRegistrar }) {
 
     setLoading(true);
     try {
-      const body = modo === 'chefe' ? { email, senha } : { usuario, senha };
+      const body = modo === 'chefe'
+        ? { login: email, senha }
+        : { login: usuario, senha };
       const r = await fetch(`${BFF}/api/auth/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
