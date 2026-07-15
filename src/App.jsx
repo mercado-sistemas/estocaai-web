@@ -54,7 +54,7 @@ export default function App() {
   }, [toast]);
 
   const carregarReposicao = useCallback(async () => {
-    try { setReposicao(await api('/reposicao')); }
+    try { setReposicao(await api('/movimentacoes/reposicao')); }
     catch (e) { toast(e.message); }
   }, [toast]);
 

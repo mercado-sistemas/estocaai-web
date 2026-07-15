@@ -34,8 +34,15 @@ export default function Login({ titulo, aoEntrar, aoRegistrar }) {
       if (!r.ok) throw new Error(dados.erro || dados.message || `Erro ${r.status}`);
 
       // Se a API já retornar as filiais, usa; senão busca
-      const lojas = dados.lojas || await buscarLojas(dados.token);
-      if (!lojas || lojas.length === 0) throw new Error('Nenhuma filial encontrada para este usuário.');
+      const lojas = (dados.lojas && dados.lojas.length > 0)
+        ? dados.lojas
+        : await buscarLojas(dados.token);
+
+      // Dono sem filiais ainda (conta nova) — entra sem filtro de filial
+      if (!lojas || lojas.length === 0) {
+        aoEntrar({ ...dados, filial: null, filialNome: null });
+        return;
+      }
 
       if (lojas.length === 1) {
         // apenas uma filial → entra direto
