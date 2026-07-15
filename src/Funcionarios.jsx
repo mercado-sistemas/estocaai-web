@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Janela, Campo, Botao, Tabela, useToast } from '@mercado/shared';
+import { Janela, Campo, Botao, Tabela, useToast } from './shared';
 import { api } from './api.js';
 
 const FORM_VAZIO = { username: '', senha: '', role: 'caixa', filial: '' };

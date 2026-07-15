@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Janela, Campo, Botao, useToast } from '@mercado/shared';
+import { Janela, Campo, Botao, useToast } from './shared';
 import { validarForm, r } from './validar.js';
 
 const BFF = import.meta.env.VITE_BFF_URL;

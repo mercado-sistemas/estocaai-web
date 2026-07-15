@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Janela, Campo, Botao, useToast } from '@mercado/shared';
+import { Janela, Campo, Botao, useToast } from './shared';
 import { auth } from './api.js';
 
 const BFF = import.meta.env.VITE_BFF_URL;
