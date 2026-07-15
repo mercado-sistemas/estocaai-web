@@ -81,8 +81,9 @@ export default function Registro({ aoRegistrar, aoVoltar }) {
           },
         }),
       });
-      const dados = await resp.json();
-      if (!resp.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+      const texto = await resp.text();
+      const dados = texto ? JSON.parse(texto) : {};
+      if (!resp.ok) throw new Error(dados.erro || dados.message || `Erro ${resp.status}`);
       localStorage.setItem('token', dados.token);
       aoRegistrar(dados);
     } catch (err) {
