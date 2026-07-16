@@ -1520,8 +1520,8 @@ function _formVendedor(v) {
     <form onsubmit="salvarVendedor(event,'${v?.id || ''}')">
       <div class="form-linha"><label>Username *</label><input id="fv-login" value="${v?.username || ''}" required autocomplete="off"></div>
       <div class="form-linha"><label>${v ? 'Nova Senha' : 'Senha *'}</label>
-        <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required minlength="4"' : ''}
-          placeholder="${v ? 'deixe em branco para manter' : 'mínimo 4 caracteres'}"></div>
+        <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required minlength="6"' : 'minlength="6"'}
+          placeholder="${v ? 'deixe em branco para manter' : 'mínimo 6 caracteres'}"></div>
       <div class="form-linha"><label>Perfil</label>
         <select id="fv-perfil">
           <option value="caixa" ${v?.role==='CAIXA'?'selected':''}>Caixa</option>

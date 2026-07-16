@@ -228,8 +228,13 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
   background-image:radial-gradient(circle at 80% 15%, rgba(255,214,10,.15), transparent 45%);
   padding:20px;
 }
-.janela-login{background:#fff; border-radius:10px; width:100%; max-width:420px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.5)}
-.janela-login .corpo-login{padding:22px; display:flex; gap:18px; align-items:center}
+.janela-login{
+  background:#fff; border-radius:10px; width:100%; max-width:420px;
+  max-height:calc(100dvh - 40px); box-shadow:0 30px 80px rgba(0,0,0,.5);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.janela-login .janela-cab{flex-shrink:0}
+.janela-login .corpo-login{padding:22px; display:flex; gap:18px; align-items:center; overflow-y:auto; min-height:0; flex:1}
 .logo-login{font-size:44px; font-weight:900; color:var(--azul); line-height:.9; flex-shrink:0; border-right:3px solid var(--amarelo); padding-right:16px}
 .logo-login span{color:var(--amarelo-2)}
 .campos-login{flex:1}
@@ -299,7 +304,7 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
 <div class="veu-login hide" id="veu-cadastro" style="z-index:300;">
   <div class="janela-login">
     <div class="janela-cab"><div class="dobra"></div><div class="tit">CRIAR CONTA — GESTOR / DONO</div></div>
-    <div style="padding:22px;">
+    <div style="padding:22px;overflow-y:auto;min-height:0;flex:1">
       <div class="form-linha"><label>Nome *</label><input id="cad-nome" placeholder="Seu nome completo"></div>
       <div class="form-linha"><label>E-mail *</label><input id="cad-email" type="email" placeholder="email@empresa.com"></div>
       <div class="form-linha"><label>Senha *</label><input id="cad-sen" type="password" placeholder="mínimo 6 caracteres"></div>
@@ -319,10 +324,10 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
       <div class="form-linha"><label>Bairro *</label><input id="cad-bairro"></div>
       <div class="form-linha"><label>Cidade *</label><input id="cad-cidade"></div>
       <div class="form-linha"><label>Estado (UF) *</label><input id="cad-uf" maxlength="2" style="width:60px" placeholder="SP"></div>
-      <div class="rodape-form">
-        <button class="btn-acao" onclick="fecharCadastro()">Cancelar</button>
-        <button class="btn-acao primario" onclick="registrarGestor()">Criar conta</button>
-      </div>
+    </div>
+    <div class="rodape-form" style="flex-shrink:0; margin:0; padding:14px 22px; border-top:1px solid var(--linha); background:#fff">
+      <button class="btn-acao" onclick="fecharCadastro()">Cancelar</button>
+      <button class="btn-acao primario" onclick="registrarGestor()">Criar conta</button>
     </div>
   </div>
 </div>
