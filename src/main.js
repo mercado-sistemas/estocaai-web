@@ -890,28 +890,66 @@ function _formCliente(c) {
       <div class="form-linha"><label>Telefone</label><input id="fc-tel" value="${c?.telefone || ''}"></div>
       <div class="form-linha"><label>Celular / WhatsApp</label><input id="fc-cel" value="${c?.celular || ''}"></div>
       <div class="form-linha"><label>E-mail</label><input id="fc-email" type="email" value="${c?.email || ''}"></div>
-      <div class="form-linha"><label>Cidade</label><input id="fc-cidade" value="${c?.cidade || ''}"></div>
-      <div class="form-linha"><label>Endereço</label><input id="fc-end" value="${c?.endereco || ''}"></div>
+      <div style="border-top:1px solid var(--linha); margin:10px 0 8px; padding-top:8px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--azul)">Endereço</div>
+      <div class="form-linha">
+        <label>CEP</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="fc-cep" value="${c?.cep || ''}" placeholder="00000-000" maxlength="9" style="width:130px" oninput="buscarCep(this.value)">
+          <span id="fc-cep-status" style="font-size:12px;color:var(--cinza)"></span>
+        </div>
+      </div>
+      <div class="form-linha"><label>Rua / Logradouro</label><input id="fc-rua" value="${c?.rua || ''}"></div>
+      <div class="form-linha"><label>Número</label><input id="fc-num" value="${c?.numero || ''}" style="width:100px"></div>
+      <div class="form-linha"><label>Complemento</label><input id="fc-comp" value="${c?.complemento || ''}" placeholder="Apto, sala…"></div>
       <div class="form-linha"><label>Bairro</label><input id="fc-bairro" value="${c?.bairro || ''}"></div>
-      <div class="form-linha"><label>CEP</label><input id="fc-cep" value="${c?.cep || ''}"></div>
+      <div class="form-linha"><label>Cidade</label><input id="fc-cidade" value="${c?.cidade || ''}"></div>
+      <div class="form-linha"><label>Estado (UF)</label><input id="fc-estado" value="${c?.estado || ''}" maxlength="2" style="width:60px" placeholder="SP"></div>
       <div class="form-linha"><label>Observação</label><input id="fc-obs" value="${c?.obs || ''}"></div>
       <div class="rodape-form">
         <button class="btn-acao" type="button" onclick="janelaClientes()">Voltar</button>
         <button class="btn-acao primario" type="submit" id="btn-fc">Gravar</button>
       </div>
-    </form>`, 680);
+    </form>`, 720);
+  setTimeout(() => $('#fc-nome')?.focus(), 60);
 }
+
+async function buscarCep(valor) {
+  const cep = valor.replace(/\D/g, '');
+  const status = $('#fc-cep-status');
+  if (cep.length !== 8) return;
+  if (status) status.textContent = 'Buscando…';
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const d = await r.json();
+    if (d.erro) { if (status) status.textContent = 'CEP não encontrado'; return; }
+    if ($('#fc-rua'))    $('#fc-rua').value    = d.logradouro || '';
+    if ($('#fc-bairro')) $('#fc-bairro').value = d.bairro     || '';
+    if ($('#fc-cidade')) $('#fc-cidade').value = d.localidade || '';
+    if ($('#fc-estado')) $('#fc-estado').value = d.uf         || '';
+    if (status) status.textContent = '✓';
+    setTimeout(() => $('#fc-num')?.focus(), 40);
+  } catch { if (status) status.textContent = 'Erro ao buscar CEP'; }
+}
+
 async function salvarCliente(e, id) {
   e.preventDefault();
   const nome = $('#fc-nome').value.trim();
   if (!nome || nome.length < 2) return toast('Nome deve ter ao menos 2 caracteres.');
   const body = {
-    nome, fantasia: $('#fc-fantasia').value.trim(),
-    cpfCnpj: $('#fc-cpfcnpj').value.trim(),
-    telefone: $('#fc-tel').value.trim(), celular: $('#fc-cel').value.trim(),
-    email: $('#fc-email').value.trim(), cidade: $('#fc-cidade').value.trim(),
-    endereco: $('#fc-end').value.trim(), bairro: $('#fc-bairro').value.trim(),
-    cep: $('#fc-cep').value.trim(), obs: $('#fc-obs').value.trim(),
+    nome,
+    fantasia:    $('#fc-fantasia').value.trim(),
+    cpfCnpj:    $('#fc-cpfcnpj').value.trim(),
+    telefone:   $('#fc-tel').value.trim(),
+    celular:    $('#fc-cel').value.trim(),
+    email:      $('#fc-email').value.trim(),
+    cep:        $('#fc-cep').value.trim(),
+    rua:        $('#fc-rua').value.trim(),
+    numero:     $('#fc-num').value.trim(),
+    complemento: $('#fc-comp').value.trim(),
+    bairro:     $('#fc-bairro').value.trim(),
+    cidade:     $('#fc-cidade').value.trim(),
+    estado:     $('#fc-estado').value.trim().toUpperCase(),
+    obs:        $('#fc-obs').value.trim(),
   };
   const btn = $('#btn-fc'); btn.disabled = true; btn.textContent = 'Gravando…';
   try {
@@ -1166,7 +1204,7 @@ Object.assign(window, {
   gravarES, gravarTransf, gravarAjuste, importarNfe,
   abrirNovoProduto, abrirEditarProduto, salvarProduto,
   // Clientes
-  janelaClientes, buscarClientes, novoCliente, editarCliente, salvarCliente,
+  janelaClientes, buscarClientes, novoCliente, editarCliente, salvarCliente, buscarCep,
   // Vendedores
   janelaVendedores, buscarVendedores, novoVendedor, editarVendedor, salvarVendedor,
   nomeFil,
