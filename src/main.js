@@ -1074,11 +1074,62 @@ function pfRenderConfirm() {
     </div></div>`;
 }
 
+function pfRenderNfe() {
+  const host = $('#pf-nfe-host'); if (!host) return;
+  if (!PF.nfeAberto) { host.innerHTML = ''; return; }
+  const resultado = PF.nfeResultado;
+  host.innerHTML = `<div class="pf-overlay" data-pf-act="closenfe">
+    <div class="pf-sheet" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;margin-bottom:10px">
+        <b style="flex:1;font-size:16px">🧾 Importar produto da NF-e</b>
+        <button class="pf-mini" data-pf-act="closenfe">✕</button>
+      </div>
+      ${!resultado ? `
+        <div style="font-size:12px;color:var(--cinza);margin-bottom:8px">Cole o XML da nota fiscal eletrônica (NF-e) recebida do fornecedor — vamos ler os itens e mostrar quais já existem no seu cadastro de produtos.</div>
+        <textarea id="pf-nfe-xml" rows="8" placeholder="<nfeProc>…</nfeProc>" style="width:100%;font-family:monospace;font-size:11px;padding:8px;border:1.5px solid var(--linha);border-radius:7px;background:#FAFBFC;resize:vertical;margin-bottom:10px">${PF.nfeXml || ''}</textarea>
+        <button class="btn-acao primario" style="width:100%" data-pf-act="consultarnfe" ${PF.nfeCarregando ? 'disabled' : ''}>${PF.nfeCarregando ? 'Lendo XML…' : 'Ler NF-e'}</button>
+      ` : `
+        <div style="font-size:12px;color:var(--cinza);margin-bottom:8px">${resultado.numero ? 'NF-e nº ' + resultado.numero + ' — ' : ''}clique num item para carregá-lo na simulação.</div>
+        <div style="overflow-y:auto;flex:1">
+          ${resultado.itens.length ? resultado.itens.map(it => `
+            <button class="pf-pickrow" data-pf-act="picknfeitem" data-id="${it.produtoId}">
+              <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${it.nome}</div>
+              <div style="font-size:11px;color:var(--cinza)">cód. ${it.cod} · qtd. na nota: ${it.quantidade}</div></div>
+            </button>`).join('') : `<div style="padding:10px;font-size:12px;color:var(--cinza)">Nenhum item da nota bateu com produtos já cadastrados.</div>`}
+          ${resultado.naoEncontrados.length ? `
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--linha)">
+              <div style="font-size:11px;font-weight:700;color:var(--vermelho);margin-bottom:6px">NÃO ENCONTRADOS NO CADASTRO (${resultado.naoEncontrados.length})</div>
+              ${resultado.naoEncontrados.map(n => `<div style="font-size:12px;color:var(--cinza);padding:3px 0">${n}</div>`).join('')}
+            </div>` : ''}
+        </div>
+        <button class="btn-acao" style="margin-top:10px" data-pf-act="voltarnfe">← Ler outra nota</button>
+      `}
+    </div></div>`;
+}
+
+async function pfConsultarNfe() {
+  const xml = $('#pf-nfe-xml')?.value.trim();
+  if (!xml) return toast('Cole o XML da NF-e primeiro.');
+  const filial = filialAtual !== 'todas' ? filialAtual : FILIAIS[0]?.id;
+  if (!filial) { toast('Cadastre uma filial antes de importar a NF-e.'); return; }
+  PF.nfeXml = xml; PF.nfeCarregando = true; pfRenderNfe();
+  try {
+    PF.nfeResultado = await apiFetch('/nfe/validar', { method: 'POST', body: { xmlNfe: xml, filial } });
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    PF.nfeCarregando = false; pfRenderNfe();
+  }
+}
+
 async function janelaPrecificar() {
   abrirJanela('Precificaí — Formação de Preço de Venda', `
-    <div style="position:relative;margin-bottom:10px">
-      <input id="pf-busca" class="inp" style="width:100%;padding:11px 12px;font-size:14px" placeholder="🔍 Buscar produto por nome ou código…" autocomplete="off">
-      <div id="pf-drop" class="pf-drop" style="display:none"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start">
+      <div style="position:relative;flex:1">
+        <input id="pf-busca" class="inp" style="width:100%;padding:11px 12px;font-size:14px" placeholder="🔍 Buscar produto por nome ou código…" autocomplete="off">
+        <div id="pf-drop" class="pf-drop" style="display:none"></div>
+      </div>
+      <button class="btn-acao" style="white-space:nowrap;flex-shrink:0" data-pf-act="opennfe">🧾 Importar da NF-e</button>
     </div>
     <div id="pf-card"></div>
     <div style="font-size:12px;color:var(--cinza);margin:6px 2px 8px">Monte simulações lado a lado e compare — deslize para o lado →</div>
@@ -1090,9 +1141,11 @@ async function janelaPrecificar() {
       </div>
     </div>
     <div id="pf-picker-host"></div>
-    <div id="pf-confirm-host"></div>`, 1040);
+    <div id="pf-confirm-host"></div>
+    <div id="pf-nfe-host"></div>`, 1040);
 
-  PF = { produtos: [], produto: null, custo: 0, busca: '', scens: [pfNovoCenario('Simulação 1')], saveSel: '', picker: null, pickTab: 'lista', pickQ: '', confirm: false };
+  PF = { produtos: [], produto: null, custo: 0, busca: '', scens: [pfNovoCenario('Simulação 1')], saveSel: '', picker: null, pickTab: 'lista', pickQ: '', confirm: false,
+    nfeAberto: false, nfeXml: '', nfeResultado: null, nfeCarregando: false };
   pfRenderCard(); pfRenderRail();
 
   try { PF.produtos = await apiFetch('/produtos'); } catch (e) { toast(e.message); }
@@ -1159,6 +1212,16 @@ document.addEventListener('click', e => {
     }
     case 'closeconfirm': PF.confirm = false; pfRenderConfirm(); break;
     case 'doconfirm': pfSalvarPreco(); break;
+    case 'opennfe': PF.nfeAberto = true; PF.nfeResultado = null; pfRenderNfe(); break;
+    case 'closenfe': PF.nfeAberto = false; pfRenderNfe(); break;
+    case 'voltarnfe': PF.nfeResultado = null; pfRenderNfe(); break;
+    case 'consultarnfe': pfConsultarNfe(); break;
+    case 'picknfeitem': {
+      const p = PF.produtos.find(x => x.id === el.dataset.id);
+      if (p) { PF.produto = p; PF.custo = p.custo || 0; pfRenderCard(); pfUpdateResultados(); }
+      PF.nfeAberto = false; pfRenderNfe();
+      break;
+    }
   }
 });
 document.addEventListener('input', e => {
