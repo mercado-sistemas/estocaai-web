@@ -33,7 +33,7 @@ export function Janela({ titulo, children, style }) {
 export function Tabela({ colunas, dados, renderLinha, vazio = 'Nenhum registro.' }) {
   return (
     <table className="m-tabela">
-      <thead><tr>{colunas.map((c) => <th key={c.chave || c} className={c.num ? 'num' : ''}>{c.rotulo || c}</th>)}</tr></thead>
+      <thead><tr>{colunas.map((c) => <th key={c.chave ?? c} className={c.num ? 'num' : ''}>{c.rotulo ?? c}</th>)}</tr></thead>
       <tbody>
         {dados.length
           ? dados.map(renderLinha)
