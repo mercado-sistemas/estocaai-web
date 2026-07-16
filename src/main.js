@@ -1297,24 +1297,102 @@ async function janelaHistorico() {
 async function janelaFiliais() {
   abrirJanela('Filiais', `
     <div class="moldura-grid" style="max-height:none"><table class="tabela">
-      <thead><tr><th>Cód</th><th>Filial</th><th class="num">Itens abaixo do mínimo</th><th class="num">Valor de estoque (custo)</th></tr></thead>
+      <thead><tr><th>ID (login Caixa)</th><th>Filial</th><th class="num">Itens abaixo do mínimo</th><th class="num">Valor de estoque (custo)</th></tr></thead>
       <tbody><tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
     </table></div>
-    <div class="rodape-form"><button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button></div>`, 720);
+    <div style="font-size:11.5px;color:var(--cinza);margin-top:8px">
+      O funcionário usa o <b>ID</b> da filial junto com usuário e senha para entrar no Caixa.
+    </div>
+    <div class="rodape-form">
+      <button class="btn-acao" onclick="abrirNovaFilial()">Incluir</button>
+      <button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button>
+    </div>`, 720);
   try {
     const prods = await apiFetch('/produtos');
     const tb = document.querySelector('#janela-ativa .tabela tbody');
     if (!tb) return;
-    tb.innerHTML = FILIAIS.map((f, i) => {
+    tb.innerHTML = FILIAIS.length ? FILIAIS.map(f => {
       const abaixo = prods.filter(p => ((p.saldo ?? {})[f.id] || 0) < (p.min || 0)).length;
       const valor = prods.reduce((s, p) => s + ((p.saldo ?? {})[f.id] || 0) * (p.custo || 0), 0);
       return `<tr>
-        <td class="num">${i + 1}</td><td>${f.nome}</td>
+        <td><b>${f.id}</b></td><td>${f.nome}</td>
         <td class="num ${abaixo ? 'neg' : ''}">${abaixo}</td>
         <td class="num">R$ ${brl(valor)}</td>
       </tr>`;
-    }).join('');
+    }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Nenhuma filial cadastrada. Clique em "Incluir" para criar a primeira.</td></tr>';
   } catch (e) { toast(e.message); }
+}
+
+function abrirNovaFilial() {
+  abrirJanela('Incluir Filial', `
+    <div class="form-linha"><label>Nome da filial *</label><input id="nf-nome" placeholder="Ex: Loja Centro"></div>
+    <div style="border-top:1px solid var(--linha);margin:10px 0 8px;padding-top:8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--azul)">Endereço (opcional)</div>
+    <div class="form-linha">
+      <label>CEP</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="nf-cep" placeholder="00000-000" maxlength="9" style="width:140px" oninput="buscarCepFilial(this.value)">
+        <span id="nf-cep-st" style="font-size:12px;color:var(--cinza)"></span>
+      </div>
+    </div>
+    <div class="form-linha"><label>Rua</label><input id="nf-rua" placeholder="Preenchido pelo CEP"></div>
+    <div class="form-linha"><label>Número</label><input id="nf-num" style="width:100px"></div>
+    <div class="form-linha"><label>Complemento</label><input id="nf-comp" placeholder="Sala, galpão…"></div>
+    <div class="form-linha"><label>Bairro</label><input id="nf-bairro"></div>
+    <div class="form-linha"><label>Cidade</label><input id="nf-cidade"></div>
+    <div class="form-linha"><label>Estado (UF)</label><input id="nf-uf" maxlength="2" style="width:60px" placeholder="SP"></div>
+    <div class="rodape-form">
+      <button class="btn-acao" onclick="janelaFiliais()">Voltar</button>
+      <button class="btn-acao primario" id="btn-nf" onclick="salvarFilial()">Gravar</button>
+    </div>`, 560);
+  setTimeout(() => $('#nf-nome')?.focus(), 60);
+}
+
+async function buscarCepFilial(valor) {
+  const cep = valor.replace(/\D/g, '');
+  const st = $('#nf-cep-st');
+  if (cep.length !== 8) return;
+  if (st) st.textContent = 'Buscando…';
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const d = await r.json();
+    if (d.erro) { if (st) st.textContent = 'CEP não encontrado'; return; }
+    if ($('#nf-rua'))    $('#nf-rua').value    = d.logradouro || '';
+    if ($('#nf-bairro')) $('#nf-bairro').value = d.bairro     || '';
+    if ($('#nf-cidade')) $('#nf-cidade').value = d.localidade || '';
+    if ($('#nf-uf'))     $('#nf-uf').value     = d.uf         || '';
+    if (st) st.textContent = '✓';
+    setTimeout(() => $('#nf-num')?.focus(), 40);
+  } catch { if (st) st.textContent = 'Erro ao buscar CEP'; }
+}
+
+async function salvarFilial() {
+  const nome = $('#nf-nome').value.trim();
+  if (!nome) return toast('Informe o nome da filial.');
+
+  const body = { nome };
+  const rua = $('#nf-rua')?.value.trim();
+  if (rua) {
+    body.endereco = {
+      cep:         $('#nf-cep')?.value.trim()    || undefined,
+      rua,
+      numero:      $('#nf-num')?.value.trim()    || undefined,
+      complemento: $('#nf-comp')?.value.trim()   || undefined,
+      bairro:      $('#nf-bairro')?.value.trim() || undefined,
+      cidade:      $('#nf-cidade')?.value.trim() || undefined,
+      estado:      $('#nf-uf')?.value.trim().toUpperCase() || undefined,
+    };
+  }
+
+  const btn = $('#btn-nf'); btn.disabled = true; btn.textContent = 'Gravando…';
+  try {
+    const loja = await apiFetch('/lojas', { method: 'POST', body });
+    FILIAIS.push(loja);
+    toast(`Filial <b>${loja.nome}</b> criada! ID para login no Caixa: <b>${loja.id}</b>`);
+    janelaFiliais();
+  } catch (e) {
+    toast(e.message);
+    btn.disabled = false; btn.textContent = 'Gravar';
+  }
 }
 
 function trocarFilial() {
@@ -1702,6 +1780,7 @@ Object.assign(window, {
   janelaProdutos, janelaBuscaPreco, janelaEntradaNF, janelaPrecificar,
   janelaEntradaSaida, janelaTransferencia, janelaAjuste,
   janelaReposicao, janelaRelEstoque, janelaHistorico, janelaFiliais,
+  abrirNovaFilial, buscarCepFilial, salvarFilial,
   trocarFilial, detalhesEstoque, produtoSimilar, totaliza, analisaProduto,
   buscarProdutos, renderGridProd, mostraSaldoAj,
   gravarES, gravarTransf, gravarAjuste, importarNfe,
