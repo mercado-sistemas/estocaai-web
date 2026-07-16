@@ -185,6 +185,8 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
 .campos-login{flex:1}
 .campos-login .form-linha{grid-template-columns:80px 1fr}
 .rodape-login{display:flex; gap:8px; justify-content:flex-end; padding:0 22px 20px}
+.aba-login{flex:1; padding:11px 0; border:none; background:var(--amarelo-bg); cursor:pointer; font-size:13.5px; font-weight:600; color:var(--cinza); transition:none}
+.aba-login.aba-ativa{background:var(--azul); color:#fff; font-weight:800}
 
 #toast{
   position:fixed; left:50%; bottom:56px; transform:translateX(-50%) translateY(16px);
@@ -202,22 +204,34 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
 <div class="veu-login" id="veu-login">
   <div class="janela-login">
     <div class="janela-cab"><div class="dobra"></div><div class="tit">ESTOCAAÍ — SISTEMA DE ESTOQUE</div></div>
+
+    <!-- Abas: Funcionário / Gestor -->
+    <div style="display:flex; border-bottom:1px solid var(--linha);">
+      <button id="aba-func" class="aba-login aba-ativa" type="button" onclick="trocarAba('func')">Funcionário</button>
+      <button id="aba-chefe" class="aba-login" type="button" onclick="trocarAba('chefe')">Gestor / Dono</button>
+    </div>
+
     <div class="corpo-login">
       <div class="logo-login">E<span>aí</span></div>
       <div class="campos-login">
         <div class="form-linha"><label for="lg-emp">Filial</label>
-          <select id="lg-emp">
-            <option value="todas">Todas as filiais</option>
-            <option value="par">1 — Parnamirim</option>
-            <option value="mac">2 — Macaíba</option>
-            <option value="nat">3 — Natal</option>
-          </select>
+          <select id="lg-emp"><option value="todas">Todas as filiais</option></select>
         </div>
-        <div class="form-linha"><label for="lg-usr">Usuário</label><input id="lg-usr" autocomplete="username" placeholder="e-mail ou username"></div>
-        <div class="form-linha"><label for="lg-sen">Senha</label><input id="lg-sen" type="password" autocomplete="current-password" placeholder="••••••"></div>
+        <div id="campo-usr" class="form-linha">
+          <label for="lg-usr">Usuário</label>
+          <input id="lg-usr" autocomplete="username" placeholder="nome de usuário">
+        </div>
+        <div id="campo-email" class="form-linha hide">
+          <label for="lg-email">E-mail</label>
+          <input id="lg-email" type="email" autocomplete="email" placeholder="seu e-mail de cadastro">
+        </div>
+        <div class="form-linha"><label for="lg-sen">Senha</label>
+          <input id="lg-sen" type="password" autocomplete="current-password" placeholder="••••••">
+        </div>
       </div>
     </div>
     <div class="rodape-login">
+      <button id="btn-cadastro" class="btn-acao hide" type="button" onclick="abrirCadastroGestor()">Criar conta</button>
       <button class="btn-acao primario" id="btn-entrar" style="min-width:110px" onclick="entrar()"><u>O</u>k</button>
     </div>
   </div>

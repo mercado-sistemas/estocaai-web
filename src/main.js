@@ -70,11 +70,75 @@ function abrirJanela(titulo, html, larg) {
 }
 function fecharJanela() { $('#janela-ativa')?.remove(); }
 
+// ─── Login — abas ─────────────────────────────────────────────────────────────
+let _modoLogin = 'func'; // 'func' | 'chefe'
+
+function trocarAba(modo) {
+  _modoLogin = modo;
+  $('#aba-func').classList.toggle('aba-ativa', modo === 'func');
+  $('#aba-chefe').classList.toggle('aba-ativa', modo === 'chefe');
+  $('#campo-usr').classList.toggle('hide', modo !== 'func');
+  $('#campo-email').classList.toggle('hide', modo !== 'chefe');
+  $('#btn-cadastro').classList.toggle('hide', modo !== 'chefe');
+  // foco no campo visível
+  setTimeout(() => (modo === 'func' ? $('#lg-usr') : $('#lg-email'))?.focus(), 40);
+}
+
+function abrirCadastroGestor() {
+  abrirJanela('Criar conta — Gestor / Dono', `
+    <p style="color:var(--cinza); font-size:13px; margin-bottom:14px">
+      Crie sua conta de administrador para começar a usar o Estocaaí.
+    </p>
+    <form onsubmit="registrarGestor(event)">
+      <div class="form-linha"><label>Nome *</label><input id="rg-nome" required placeholder="Seu nome completo"></div>
+      <div class="form-linha"><label>E-mail *</label><input id="rg-email" type="email" required placeholder="seu@email.com"></div>
+      <div class="form-linha"><label>Senha *</label><input id="rg-senha" type="password" required placeholder="mínimo 6 caracteres" minlength="6"></div>
+      <div class="form-linha"><label>Confirmar Senha *</label><input id="rg-conf" type="password" required placeholder="repita a senha"></div>
+      <div class="rodape-form">
+        <button class="btn-acao" type="button" onclick="fecharJanela()">Cancelar</button>
+        <button class="btn-acao primario" type="submit" id="btn-rg">Criar conta</button>
+      </div>
+    </form>`, 560);
+}
+
+async function registrarGestor(e) {
+  e.preventDefault();
+  const nome  = $('#rg-nome').value.trim();
+  const email = $('#rg-email').value.trim();
+  const senha = $('#rg-senha').value;
+  const conf  = $('#rg-conf').value;
+  if (!nome)  return toast('Informe seu nome.');
+  if (!email) return toast('Informe o e-mail.');
+  if (senha.length < 6) return toast('Senha deve ter ao menos 6 caracteres.');
+  if (senha !== conf) return toast('As senhas não conferem.');
+
+  const btn = $('#btn-rg'); btn.disabled = true; btn.textContent = 'Criando…';
+  try {
+    await fetch(`${BFF}/api/auth/registrar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nome, email, senha, perfil: 'ADMIN' }),
+    }).then(async r => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.erro || d.message || `Erro ${r.status}`);
+    });
+    fecharJanela();
+    toast(`Conta criada! Faça login com <b>${email}</b>.`);
+    trocarAba('chefe');
+    $('#lg-email').value = email;
+  } catch (err) {
+    toast(err.message);
+    btn.disabled = false; btn.textContent = 'Criar conta';
+  }
+}
+
 // ─── Login ────────────────────────────────────────────────────────────────────
 async function entrar() {
-  const loginVal = $('#lg-usr').value.trim();
+  const loginVal = _modoLogin === 'chefe'
+    ? ($('#lg-email')?.value || '').trim()
+    : ($('#lg-usr')?.value || '').trim();
   const senhaVal = $('#lg-sen').value.trim();
-  if (!loginVal) return toast('Informe o usuário ou e-mail.');
+  if (!loginVal) return toast(_modoLogin === 'chefe' ? 'Informe o e-mail.' : 'Informe o usuário.');
   if (!senhaVal) return toast('Informe a senha.');
 
   const btn = $('#btn-entrar');
@@ -1039,10 +1103,16 @@ function relogio() {
 setInterval(relogio, 1000); relogio();
 montarMenus(); montarToolbar();
 $('#lg-sen').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+$('#lg-usr').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+// lg-email criado dinamicamente mas escuta keydown via delegação
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'lg-email' && e.key === 'Enter') entrar();
+});
 
 // ─── Expor funções ao escopo global (chamadas por onclick no HTML) ─────────────
 Object.assign(window, {
-  entrar, fecharJanela, fecharMenus, stub,
+  entrar, trocarAba, abrirCadastroGestor, registrarGestor,
+  fecharJanela, fecharMenus, stub,
   janelaProdutos, janelaBuscaPreco, janelaEntradaNF,
   janelaEntradaSaida, janelaTransferencia, janelaAjuste,
   janelaReposicao, janelaRelEstoque, janelaHistorico, janelaFiliais,
