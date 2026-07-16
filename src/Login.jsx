@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Janela, Campo, Botao, useToast } from './shared';
+import { auth } from './api.js';
 
 const BFF = import.meta.env.VITE_BFF_URL;
 
@@ -34,6 +35,8 @@ export default function Login({ titulo, aoEntrar, aoRegistrar }) {
       const texto = await r.text();
       const dados = texto ? JSON.parse(texto) : {};
       if (!r.ok) throw new Error(dados.erro || dados.message || `Erro ${r.status}`);
+
+      auth.set(dados.token);
 
       // Se a API já retornar as filiais, usa; senão busca
       const lojas = (dados.lojas && dados.lojas.length > 0)

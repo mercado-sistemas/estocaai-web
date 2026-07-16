@@ -180,9 +180,10 @@ export default function App() {
                     <td className="num">{p.cod}</td>
                     <td>{p.nome}</td>
                     <td>{p.un}</td>
-                    {Object.keys(FILIAIS).map((f) => (
-                      <td key={f} className={`num ${p.saldo[f] < p.min ? 'neg' : ''}`}>{p.saldo[f]}</td>
-                    ))}
+                    {Object.keys(FILIAIS).map((f) => {
+                      const sld = (p.saldo ?? {})[f] ?? 0;
+                      return <td key={f} className={`num ${sld < p.min ? 'neg' : ''}`}>{sld}</td>;
+                    })}
                     <td className="num">{brl(p.preco)}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button onClick={() => abrirEditar(p)} style={{ marginRight: 4, cursor: 'pointer', fontSize: 11, padding: '2px 6px', border: '1px solid var(--linha)', borderRadius: 4, background: 'var(--amarelo-bg)' }}>Editar</button>
