@@ -50,8 +50,8 @@ export default function Registro({ aoRegistrar, aoVoltar }) {
       email:    [r.obrigatorio, r.email],
       senha:    [r.obrigatorio, r.minLen(6), r.maxLen(128)],
       confirmar:[r.obrigatorio, r.igual(form.senha, 'senha')],
-      telefone: [r.minLen(8)],
-      cep:      [r.minLen(8)],
+      telefone: [r.obrigatorio, r.minLen(8)],
+      cep:      [r.obrigatorio, r.minLen(8)],
       rua:      [r.obrigatorio, r.minLen(2)],
       numero:   [r.obrigatorio],
       bairro:   [r.obrigatorio],
@@ -126,7 +126,7 @@ export default function Registro({ aoRegistrar, aoVoltar }) {
           </div>
 
           <Sec titulo="CONTATO" />
-          <Campo label="Telefone / WhatsApp" type="tel" value={form.telefone} onChange={set('telefone')} placeholder="(84) 99999-0000" />
+          <Campo label="Telefone / WhatsApp *" type="tel" value={form.telefone} onChange={set('telefone')} placeholder="(84) 99999-0000" />
           <EMsg campo="telefone" />
 
           <Sec titulo="ENDEREÇO DA EMPRESA" />

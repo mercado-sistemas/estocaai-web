@@ -98,21 +98,21 @@ function abrirCadastroGestor() {
           <div class="form-linha"><label>Nome *</label><input id="cad-nome" placeholder="Seu nome completo"></div>
           <div class="form-linha"><label>E-mail *</label><input id="cad-email" type="email" placeholder="email@empresa.com"></div>
           <div class="form-linha"><label>Senha *</label><input id="cad-sen" type="password" placeholder="mínimo 6 caracteres"></div>
-          <div class="form-linha"><label>Telefone</label><input id="cad-tel" type="tel" placeholder="(00) 00000-0000"></div>
+          <div class="form-linha"><label>Telefone *</label><input id="cad-tel" type="tel" placeholder="(00) 00000-0000"></div>
           <div style="border-top:1px solid var(--linha);margin:10px 0 8px;padding-top:8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--azul)">Endereço</div>
           <div class="form-linha">
-            <label>CEP</label>
+            <label>CEP *</label>
             <div style="display:flex;gap:8px;align-items:center">
               <input id="cad-cep" placeholder="00000-000" maxlength="9" style="width:140px" oninput="buscarCepCadastro(this.value)">
               <span id="cad-cep-st" style="font-size:12px;color:var(--cinza)"></span>
             </div>
           </div>
-          <div class="form-linha"><label>Rua</label><input id="cad-rua" placeholder="Preenchido pelo CEP"></div>
-          <div class="form-linha"><label>Número</label><input id="cad-num" style="width:100px"></div>
+          <div class="form-linha"><label>Rua *</label><input id="cad-rua" placeholder="Preenchido pelo CEP"></div>
+          <div class="form-linha"><label>Número *</label><input id="cad-num" style="width:100px"></div>
           <div class="form-linha"><label>Complemento</label><input id="cad-comp" placeholder="Apto, sala…"></div>
-          <div class="form-linha"><label>Bairro</label><input id="cad-bairro"></div>
-          <div class="form-linha"><label>Cidade</label><input id="cad-cidade"></div>
-          <div class="form-linha"><label>Estado (UF)</label><input id="cad-uf" maxlength="2" style="width:60px" placeholder="SP"></div>
+          <div class="form-linha"><label>Bairro *</label><input id="cad-bairro"></div>
+          <div class="form-linha"><label>Cidade *</label><input id="cad-cidade"></div>
+          <div class="form-linha"><label>Estado (UF) *</label><input id="cad-uf" maxlength="2" style="width:60px" placeholder="SP"></div>
           <div class="rodape-form">
             <button class="btn-acao" onclick="fecharCadastro()">Cancelar</button>
             <button class="btn-acao primario" onclick="registrarGestor()">Criar conta</button>
@@ -121,7 +121,7 @@ function abrirCadastroGestor() {
       </div>`;
     document.body.appendChild(v);
   }
-  ['cad-nome','cad-email','cad-sen','cad-tel','cad-cep','cad-rua','cad-num','cad-comp','cad-bairro','cad-cidade','cad-uf']
+  ['cad-nome','cad-email','cad-sen','cad-sen-conf','cad-tel','cad-cep','cad-rua','cad-num','cad-comp','cad-bairro','cad-cidade','cad-uf']
     .forEach(id => { const el = $(`#${id}`); if (el) el.value = ''; });
   v.classList.remove('hide');
   setTimeout(() => $('#cad-nome')?.focus(), 40);
@@ -152,23 +152,35 @@ async function registrarGestor() {
   const nome  = $('#cad-nome').value.trim();
   const email = $('#cad-email').value.trim();
   const senha = $('#cad-sen').value;
-  if (!nome)           return toast('Informe seu nome.');
-  if (!email)          return toast('Informe o e-mail.');
-  if (senha.length < 6) return toast('Senha deve ter ao menos 6 caracteres.');
+  const senhaConf = $('#cad-sen-conf')?.value;
+  const telefone = $('#cad-tel')?.value.trim();
+  const cep     = $('#cad-cep')?.value.trim();
+  const rua     = $('#cad-rua')?.value.trim();
+  const numero  = $('#cad-num')?.value.trim();
+  const bairro  = $('#cad-bairro')?.value.trim();
+  const cidade  = $('#cad-cidade')?.value.trim();
+  const estado  = $('#cad-uf')?.value.trim().toUpperCase();
 
-  const body = { nome, email, senha, telefone: $('#cad-tel')?.value.trim() || undefined };
-  const rua = $('#cad-rua')?.value.trim();
-  if (rua) {
-    body.endereco = {
-      cep:         $('#cad-cep')?.value.trim()    || undefined,
-      rua,
-      numero:      $('#cad-num')?.value.trim()    || undefined,
-      complemento: $('#cad-comp')?.value.trim()   || undefined,
-      bairro:      $('#cad-bairro')?.value.trim() || undefined,
-      cidade:      $('#cad-cidade')?.value.trim() || undefined,
-      estado:      $('#cad-uf')?.value.trim().toUpperCase() || undefined,
-    };
-  }
+  if (!nome)            return toast('Informe seu nome.');
+  if (!email)           return toast('Informe o e-mail.');
+  if (senha.length < 6)  return toast('Senha deve ter ao menos 6 caracteres.');
+  if (senha !== senhaConf) return toast('As senhas não conferem.');
+  if (!telefone)        return toast('Informe o telefone.');
+  if (!cep)             return toast('Informe o CEP.');
+  if (!rua)             return toast('Informe a rua.');
+  if (!numero)          return toast('Informe o número.');
+  if (!bairro)          return toast('Informe o bairro.');
+  if (!cidade)          return toast('Informe a cidade.');
+  if (!estado)          return toast('Informe o estado (UF).');
+
+  const body = {
+    nome, email, senha, telefone,
+    endereco: {
+      cep, rua, numero,
+      complemento: $('#cad-comp')?.value.trim() || undefined,
+      bairro, cidade, estado,
+    },
+  };
 
   try {
     const r = await fetch(`${BFF}/api/auth/registrar`, {
