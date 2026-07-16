@@ -124,7 +124,7 @@ export default function App() {
     });
     if (falhasMov) return toast(Object.values(falhasMov)[0]);
     try {
-      await api('/movimentacoes', { method: 'POST', body: { ...mov, produtoId: Number(mov.produtoId), qtd: Number(mov.qtd) } });
+      await api('/movimentacoes', { method: 'POST', body: { ...mov, qtd: Number(mov.qtd) } });
       toast('Movimentação registrada.');
       setMov({ ...mov, qtd: '', obs: '' });
       carregarProdutos();
