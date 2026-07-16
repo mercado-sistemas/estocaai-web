@@ -214,9 +214,6 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
     <div class="corpo-login">
       <div class="logo-login">E<span>aí</span></div>
       <div class="campos-login">
-        <div class="form-linha"><label for="lg-emp">Filial</label>
-          <select id="lg-emp"><option value="todas">Todas as filiais</option></select>
-        </div>
         <div id="campo-usr" class="form-linha">
           <label for="lg-usr">Usuário</label>
           <input id="lg-usr" autocomplete="username" placeholder="nome de usuário">
@@ -233,6 +230,33 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
     <div class="rodape-login">
       <button id="btn-cadastro" class="btn-acao hide" type="button" onclick="abrirCadastroGestor()">Criar conta</button>
       <button class="btn-acao primario" id="btn-entrar" style="min-width:110px" onclick="entrar()"><u>O</u>k</button>
+    </div>
+  </div>
+</div>
+
+<!-- Filial picker (shown after login when user has multiple lojas) -->
+<div class="veu-login hide" id="veu-filial">
+  <div class="janela-login">
+    <div class="janela-cab"><div class="dobra"></div><div class="tit">SELECIONAR FILIAL</div></div>
+    <div class="corpo-login" style="flex-direction:column; padding:22px; gap:12px;">
+      <p style="font-size:13.5px; color:var(--cinza);">Escolha a filial que deseja acessar:</p>
+      <div id="lista-filiais-picker" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Cadastro Gestor inline overlay -->
+<div class="veu-login hide" id="veu-cadastro" style="z-index:300;">
+  <div class="janela-login">
+    <div class="janela-cab"><div class="dobra"></div><div class="tit">CRIAR CONTA — GESTOR / DONO</div></div>
+    <div style="padding:22px;">
+      <div class="form-linha"><label>Nome</label><input id="cad-nome" placeholder="Seu nome completo"></div>
+      <div class="form-linha"><label>E-mail</label><input id="cad-email" type="email" placeholder="email@empresa.com"></div>
+      <div class="form-linha"><label>Senha</label><input id="cad-sen" type="password" placeholder="mínimo 6 caracteres"></div>
+      <div class="rodape-form">
+        <button class="btn-acao" onclick="fecharCadastro()">Cancelar</button>
+        <button class="btn-acao primario" onclick="registrarGestor()">Criar conta</button>
+      </div>
     </div>
   </div>
 </div>

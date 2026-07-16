@@ -85,34 +85,46 @@ function trocarAba(modo) {
 }
 
 function abrirCadastroGestor() {
-  abrirJanela('Criar conta — Gestor / Dono', `
-    <p style="color:var(--cinza); font-size:13px; margin-bottom:14px">
-      Crie sua conta de administrador para começar a usar o Estocaaí.
-    </p>
-    <form onsubmit="registrarGestor(event)">
-      <div class="form-linha"><label>Nome *</label><input id="rg-nome" required placeholder="Seu nome completo"></div>
-      <div class="form-linha"><label>E-mail *</label><input id="rg-email" type="email" required placeholder="seu@email.com"></div>
-      <div class="form-linha"><label>Senha *</label><input id="rg-senha" type="password" required placeholder="mínimo 6 caracteres" minlength="6"></div>
-      <div class="form-linha"><label>Confirmar Senha *</label><input id="rg-conf" type="password" required placeholder="repita a senha"></div>
-      <div class="rodape-form">
-        <button class="btn-acao" type="button" onclick="fecharJanela()">Cancelar</button>
-        <button class="btn-acao primario" type="submit" id="btn-rg">Criar conta</button>
-      </div>
-    </form>`, 560);
+  let v = $('#veu-cadastro');
+  if (!v) {
+    v = document.createElement('div');
+    v.id = 'veu-cadastro';
+    v.className = 'veu-login';
+    v.style.cssText = 'z-index:300';
+    v.innerHTML = `
+      <div class="janela-login">
+        <div class="janela-cab"><div class="dobra"></div><div class="tit">CRIAR CONTA — GESTOR / DONO</div></div>
+        <div style="padding:22px;">
+          <div class="form-linha"><label>Nome</label><input id="cad-nome" placeholder="Seu nome completo"></div>
+          <div class="form-linha"><label>E-mail</label><input id="cad-email" type="email" placeholder="email@empresa.com"></div>
+          <div class="form-linha"><label>Senha</label><input id="cad-sen" type="password" placeholder="mínimo 6 caracteres"></div>
+          <div class="rodape-form">
+            <button class="btn-acao" onclick="fecharCadastro()">Cancelar</button>
+            <button class="btn-acao primario" onclick="registrarGestor()">Criar conta</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(v);
+  }
+  $('#cad-nome').value = '';
+  $('#cad-email').value = '';
+  $('#cad-sen').value = '';
+  v.classList.remove('hide');
+  setTimeout(() => $('#cad-nome')?.focus(), 40);
 }
 
-async function registrarGestor(e) {
-  e.preventDefault();
-  const nome  = $('#rg-nome').value.trim();
-  const email = $('#rg-email').value.trim();
-  const senha = $('#rg-senha').value;
-  const conf  = $('#rg-conf').value;
+function fecharCadastro() {
+  $('#veu-cadastro')?.classList.add('hide');
+}
+
+async function registrarGestor() {
+  const nome  = $('#cad-nome').value.trim();
+  const email = $('#cad-email').value.trim();
+  const senha = $('#cad-sen').value;
   if (!nome)  return toast('Informe seu nome.');
   if (!email) return toast('Informe o e-mail.');
   if (senha.length < 6) return toast('Senha deve ter ao menos 6 caracteres.');
-  if (senha !== conf) return toast('As senhas não conferem.');
 
-  const btn = $('#btn-rg'); btn.disabled = true; btn.textContent = 'Criando…';
   try {
     const r = await fetch(`${BFF}/api/auth/registrar`, {
       method: 'POST',
@@ -121,13 +133,12 @@ async function registrarGestor(e) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.erro || d.message || `Erro ${r.status}`);
-    fecharJanela();
-    toast(`Conta criada com sucesso! Faça login com <b>${email}</b>.`);
+    fecharCadastro();
+    toast(`Conta criada! Faça login com <b>${email}</b>.`);
     trocarAba('chefe');
     setTimeout(() => { if ($('#lg-email')) $('#lg-email').value = email; }, 100);
   } catch (err) {
     toast(err.message);
-    btn.disabled = false; btn.textContent = 'Criar conta';
   }
 }
 
@@ -155,21 +166,41 @@ async function entrar() {
     auth.set(dados.token);
     sessao = dados;
 
-    // Carrega filiais reais do banco
-    try {
-      const lojas = await apiFetch('/lojas');
-      if (lojas && lojas.length > 0) FILIAIS = lojas;
-    } catch (_) {
-      // fallback: usa lojas que vieram no login, se houver
-      if (dados.lojas && dados.lojas.length > 0) FILIAIS = dados.lojas;
+    // Owner (ADMIN) loads all lojas from /lojas endpoint
+    // Employee only gets assigned lojas from login response
+    if (dados.role === 'ADMIN') {
+      try {
+        const lojas = await apiFetch('/lojas');
+        if (lojas && lojas.length > 0) FILIAIS = lojas;
+      } catch (_) {
+        if (dados.lojas?.length > 0) FILIAIS = dados.lojas;
+      }
+    } else {
+      FILIAIS = dados.lojas || [];
     }
-    atualizarSelectFiliais();
 
-    filialAtual = $('#lg-emp').value || (FILIAIS[0]?.id ?? 'todas');
     $('#veu-login').classList.add('hide');
-    $('#st-usuario').textContent = dados.nome || loginVal.toUpperCase();
-    $('#st-filial').textContent = nomeFil(filialAtual);
-    toast(`Bem-vindo(a), <b>${dados.nome || loginVal}</b>! Tecle <b>F7</b> para abrir Produtos.`);
+
+    if (FILIAIS.length === 0) {
+      filialAtual = 'todas';
+      entrarNoSistema(dados, loginVal);
+    } else if (FILIAIS.length === 1) {
+      filialAtual = FILIAIS[0].id;
+      entrarNoSistema(dados, loginVal);
+    } else {
+      // Show filial picker
+      const lista = $('#lista-filiais-picker');
+      const lojasBtns = FILIAIS.map((f, i) =>
+        `<button class="btn-acao" style="text-align:left; padding:12px 16px; font-size:14px"
+           onclick="selecionarFilialLogin('${f.id}')">
+           <b>${i + 1}</b> — ${f.nome}
+         </button>`
+      ).join('');
+      lista.innerHTML = lojasBtns;
+      $('#veu-filial').classList.remove('hide');
+      window._dadosLogin = dados;
+      window._loginVal = loginVal;
+    }
   } catch (e) {
     toast(e.message);
   } finally {
@@ -177,11 +208,16 @@ async function entrar() {
   }
 }
 
-function atualizarSelectFiliais() {
-  const sel = $('#lg-emp');
-  if (!sel) return;
-  sel.innerHTML = '<option value="todas">Todas as filiais</option>' +
-    FILIAIS.map((f, i) => `<option value="${f.id}">${i + 1} — ${f.nome}</option>`).join('');
+function selecionarFilialLogin(id) {
+  filialAtual = id;
+  $('#veu-filial').classList.add('hide');
+  entrarNoSistema(window._dadosLogin, window._loginVal);
+}
+
+function entrarNoSistema(dados, loginVal) {
+  $('#st-usuario').textContent = dados.nome || loginVal.toUpperCase();
+  $('#st-filial').textContent = nomeFil(filialAtual);
+  toast(`Bem-vindo(a), <b>${dados.nome || loginVal}</b>! Tecle <b>F7</b> para abrir Produtos.`);
 }
 
 // ─── Opções auxiliares ────────────────────────────────────────────────────────
@@ -886,15 +922,16 @@ async function salvarCliente(e, id) {
 }
 
 // ─── Cadastro de Vendedores / Funcionários ────────────────────────────────────
+// ─── Funcionários ─────────────────────────────────────────────────────────────
 async function janelaVendedores() {
-  abrirJanela('Vendedores e Usuários', `
+  abrirJanela('Funcionários', `
     <div class="linha-consulta" style="margin-bottom:10px">
-      <input type="text" id="vend-busca" placeholder="Nome ou login…" autocomplete="off">
+      <input type="text" id="vend-busca" placeholder="Username…" autocomplete="off">
       <button class="btn-acao" onclick="buscarVendedores()">Buscar</button>
     </div>
     <div class="moldura-grid" style="max-height:260px"><table class="tabela" id="grid-vend">
-      <thead><tr><th class="num">Cód</th><th>Nome</th><th>Login</th><th>Perfil</th><th>Situação</th></tr></thead>
-      <tbody><tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
+      <thead><tr><th>Username</th><th>Perfil</th><th>Filiais</th><th>Situação</th></tr></thead>
+      <tbody><tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
     </table></div>
     <div class="grade-botoes" style="margin-top:10px">
       <button class="btn-acao" onclick="novoVendedor()">Incluir</button>
@@ -908,45 +945,54 @@ async function janelaVendedores() {
 let _vendSel = null;
 let _vendedores = [];
 async function buscarVendedores() {
-  const q = ($('#vend-busca')?.value || '').trim();
   const tb = document.querySelector('#grid-vend tbody');
   if (!tb) return;
-  tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr>';
+  tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr>';
   try {
-    _vendedores = await apiFetch(`/usuarios${q ? '?busca=' + encodeURIComponent(q) : ''}`);
+    _vendedores = await apiFetch('/funcionarios');
     if (_vendedores.length > 0) _vendSel = _vendedores[0].id;
     tb.innerHTML = _vendedores.map(v => `
       <tr class="${v.id === _vendSel ? 'sel' : ''}" onclick="_vendSel='${v.id}'; document.querySelectorAll('#grid-vend tbody tr').forEach(r=>r.classList.remove('sel')); this.classList.add('sel')">
-        <td class="num">${v.cod || '—'}</td><td>${v.nome}</td><td>${v.login || '—'}</td>
-        <td>${v.perfil || '—'}</td>
+        <td>${v.username}</td>
+        <td>${v.role === 'GESTAO' ? 'Gestão' : 'Caixa'}</td>
+        <td>${(v.lojas || []).join(', ') || '—'}</td>
         <td><b style="color:${v.ativo !== false ? 'var(--verde)' : 'var(--vermelho)'}">${v.ativo !== false ? 'Ativo' : 'Inativo'}</b></td>
       </tr>`).join('') ||
-      '<tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Nenhum usuário encontrado.</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Nenhum funcionário encontrado.</td></tr>';
   } catch (e) {
-    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--vermelho);padding:18px">${e.message}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--vermelho);padding:18px">${e.message}</td></tr>`;
   }
 }
 function novoVendedor() { _formVendedor(null); }
 function editarVendedor() {
   const v = _vendedores.find(x => x.id === _vendSel);
-  if (!v) return toast('Selecione um usuário para alterar.');
+  if (!v) return toast('Selecione um funcionário para alterar.');
   _formVendedor(v);
 }
 function _formVendedor(v) {
-  abrirJanela(v ? `Alterar Usuário — ${v.nome}` : 'Incluir Usuário', `
+  const lojasCheck = FILIAIS.map(f => {
+    const marcado = v?.lojas?.includes(f.id) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0">
+      <input type="checkbox" name="loja" value="${f.id}" ${marcado}> ${f.nome}
+    </label>`;
+  }).join('');
+
+  abrirJanela(v ? `Alterar Funcionário — ${v.username}` : 'Incluir Funcionário', `
     <form onsubmit="salvarVendedor(event,'${v?.id || ''}')">
-      <div class="form-linha"><label>Nome *</label><input id="fv-nome" value="${v?.nome || ''}" required></div>
-      <div class="form-linha"><label>Login *</label><input id="fv-login" value="${v?.login || ''}" required autocomplete="off"></div>
-      <div class="form-linha"><label>E-mail</label><input id="fv-email" type="email" value="${v?.email || ''}"></div>
-      <div class="form-linha"><label>${v ? 'Nova Senha (deixe em branco para manter)' : 'Senha *'}</label>
-        <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required' : ''}></div>
+      <div class="form-linha"><label>Username *</label><input id="fv-login" value="${v?.username || ''}" required autocomplete="off"></div>
+      <div class="form-linha"><label>${v ? 'Nova Senha' : 'Senha *'}</label>
+        <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required minlength="4"' : ''}
+          placeholder="${v ? 'deixe em branco para manter' : 'mínimo 4 caracteres'}"></div>
       <div class="form-linha"><label>Perfil</label>
         <select id="fv-perfil">
-          <option value="VENDEDOR" ${v?.perfil==='VENDEDOR'?'selected':''}>Vendedor</option>
-          <option value="GERENTE" ${v?.perfil==='GERENTE'?'selected':''}>Gerente</option>
-          <option value="ADMIN" ${v?.perfil==='ADMIN'?'selected':''}>Administrador</option>
+          <option value="caixa" ${v?.role==='CAIXA'?'selected':''}>Caixa</option>
+          <option value="gestao" ${v?.role==='GESTAO'?'selected':''}>Gestão</option>
         </select>
       </div>
+      ${FILIAIS.length > 0 ? `<div class="form-linha" style="align-items:flex-start">
+        <label style="padding-top:4px">Filiais</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 16px;padding:6px 0">${lojasCheck}</div>
+      </div>` : ''}
       <div class="rodape-form">
         <button class="btn-acao" type="button" onclick="janelaVendedores()">Voltar</button>
         <button class="btn-acao primario" type="submit" id="btn-fv">Gravar</button>
@@ -955,18 +1001,17 @@ function _formVendedor(v) {
 }
 async function salvarVendedor(e, id) {
   e.preventDefault();
-  const nome = $('#fv-nome').value.trim();
-  const login = $('#fv-login').value.trim();
+  const username = $('#fv-login').value.trim();
   const senha = $('#fv-senha').value;
-  if (!nome) return toast('Nome é obrigatório.');
-  if (!login) return toast('Login é obrigatório.');
-  if (!id && !senha) return toast('Senha é obrigatória para novo usuário.');
-  const body = { nome, login, email: $('#fv-email').value.trim(), perfil: $('#fv-perfil').value };
+  if (!username) return toast('Username é obrigatório.');
+  if (!id && !senha) return toast('Senha é obrigatória para novo funcionário.');
+  const lojas = [...document.querySelectorAll('input[name="loja"]:checked')].map(c => c.value);
+  const body = { username, role: $('#fv-perfil').value, lojas };
   if (senha) body.senha = senha;
   const btn = $('#btn-fv'); btn.disabled = true; btn.textContent = 'Gravando…';
   try {
-    if (id) { await apiFetch(`/usuarios/${id}`, { method: 'PUT', body }); toast('Usuário atualizado.'); }
-    else { await apiFetch('/usuarios', { method: 'POST', body }); toast('Usuário criado.'); }
+    if (id) { await apiFetch(`/funcionarios/${id}`, { method: 'PUT', body }); toast('Funcionário atualizado.'); }
+    else { await apiFetch('/funcionarios', { method: 'POST', body }); toast('Funcionário criado.'); }
     janelaVendedores();
   } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Gravar'; }
 }
@@ -1110,7 +1155,8 @@ document.addEventListener('keydown', e => {
 
 // ─── Expor funções ao escopo global (chamadas por onclick no HTML) ─────────────
 Object.assign(window, {
-  entrar, trocarAba, abrirCadastroGestor, registrarGestor,
+  entrar, trocarAba, abrirCadastroGestor, registrarGestor, fecharCadastro,
+  selecionarFilialLogin,
   fecharJanela, fecharMenus, stub,
   janelaProdutos, janelaBuscaPreco, janelaEntradaNF,
   janelaEntradaSaida, janelaTransferencia, janelaAjuste,
