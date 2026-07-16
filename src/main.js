@@ -114,18 +114,17 @@ async function registrarGestor(e) {
 
   const btn = $('#btn-rg'); btn.disabled = true; btn.textContent = 'Criando…';
   try {
-    await fetch(`${BFF}/api/auth/registrar`, {
+    const r = await fetch(`${BFF}/api/auth/registrar`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ nome, email, senha, perfil: 'ADMIN' }),
-    }).then(async r => {
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.erro || d.message || `Erro ${r.status}`);
+      body: JSON.stringify({ nome, email, senha }),
     });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || d.message || `Erro ${r.status}`);
     fecharJanela();
-    toast(`Conta criada! Faça login com <b>${email}</b>.`);
+    toast(`Conta criada com sucesso! Faça login com <b>${email}</b>.`);
     trocarAba('chefe');
-    $('#lg-email').value = email;
+    setTimeout(() => { if ($('#lg-email')) $('#lg-email').value = email; }, 100);
   } catch (err) {
     toast(err.message);
     btn.disabled = false; btn.textContent = 'Criar conta';
