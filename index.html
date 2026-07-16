@@ -163,6 +163,56 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
 .rodape-form{display:flex; gap:8px; justify-content:flex-end; margin-top:14px}
 .rodape-form .btn-acao{min-width:130px}
 
+.inp{border:1.5px solid var(--linha); border-radius:7px; padding:7px 9px; font-size:13px; background:#FAFBFC; font-family:inherit; color:var(--tinta)}
+.inp:focus{outline:2px solid var(--amarelo); border-color:var(--amarelo-2)}
+
+/* ─── Precificaí ─── */
+.pf-rail{display:flex; gap:14px; overflow-x:auto; padding:4px 2px 90px; scroll-snap-type:x mandatory}
+.pf-rail::-webkit-scrollbar{height:8px}
+.pf-rail::-webkit-scrollbar-thumb{background:var(--linha); border-radius:99px}
+.pf-col{scroll-snap-align:start; flex:0 0 300px; background:#fff; border:2px solid var(--linha); border-radius:14px; padding:14px; position:relative}
+.pf-col.melhor{border-color:var(--verde)}
+.pf-badge{display:none; position:absolute; top:-11px; right:12px; background:var(--verde); color:#fff; font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 8px; border-radius:99px}
+.pf-col.melhor .pf-badge{display:block}
+.pf-mini{border:1.5px solid var(--azul); background:transparent; border-radius:7px; font-size:12px; font-weight:700; padding:4px 7px; cursor:pointer; flex-shrink:0}
+.pf-mini.red{color:var(--vermelho); border-color:var(--vermelho)}
+.pf-ghost{border:2px dashed var(--azul); background:transparent; font-weight:700; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; width:100%}
+.pf-taxrow{display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:8px; background:var(--fundo); border:1.5px solid var(--azul); margin-bottom:5px}
+.pf-taxrow.destaque{background:var(--amarelo-bg)}
+.pf-taxrow .nome{flex:1; font-size:12px; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pf-modo{display:flex; gap:6px; margin:8px 0}
+.pf-modo button{flex:1; padding:7px 4px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:700; border:2px solid var(--azul); background:transparent}
+.pf-modo button.on{background:var(--azul); color:#fff}
+.pf-chip{padding:3px 8px; border-radius:99px; font-size:10px; font-weight:700; cursor:pointer; border:1.5px solid var(--azul); background:transparent}
+.pf-chip.on{background:var(--amarelo)}
+.pf-etiqueta{background:var(--amarelo); border-radius:10px; padding:8px 12px; text-align:center; transform:rotate(-2deg); box-shadow:2px 3px 0 rgba(20,33,61,.22); flex-shrink:0}
+.pf-etiqueta .t{font-size:8px; font-weight:700; letter-spacing:1px}
+.pf-etiqueta .p{font-weight:900; line-height:1}
+.pf-legenda{margin-top:8px}
+.pf-legenda div{display:flex; align-items:center; gap:6px; font-size:11px}
+.pf-legenda span.sw{width:9px; height:9px; border-radius:2px; flex-shrink:0}
+.pf-legenda span.nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pf-lucrobox{margin-top:10px; padding:8px 10px; border-radius:8px; font-size:12px}
+.pf-lucrobox.ok{background:var(--verde-bg); border:1.5px solid var(--verde)}
+.pf-lucrobox.ruim{background:var(--vermelho-bg); border:1.5px solid var(--vermelho)}
+.pf-savebar{position:sticky; bottom:-14px; left:-14px; right:-14px; margin:14px -14px -14px; background:#fff; border-top:2px solid var(--azul); padding:10px 14px}
+.pf-savebar .in{display:flex; gap:10px; align-items:center}
+.pf-savebar select{flex:1; min-width:0; padding:11px 10px; font-weight:700; font-size:14px}
+.pf-savebar .btn{border:none; border-radius:10px; padding:12px 18px; font-size:14px; font-weight:700; flex-shrink:0; background:#C9C7BF; color:#fff; cursor:not-allowed}
+.pf-savebar .btn.on{background:var(--verde); cursor:pointer}
+.pf-overlay{position:fixed; inset:0; background:rgba(20,33,61,.5); z-index:400; display:flex; align-items:flex-end; justify-content:center}
+.pf-overlay.center{align-items:center; padding:16px}
+.pf-sheet{background:#fff; border-radius:16px 16px 0 0; width:100%; max-width:560px; max-height:82vh; display:flex; flex-direction:column; padding:16px}
+.pf-modal{background:#fff; border-radius:16px; padding:20px; width:100%; max-width:400px; border:2px solid var(--azul)}
+.pf-tabs{display:flex; gap:6px; margin-bottom:10px}
+.pf-tabs button{flex:1; padding:8px 4px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:700; border:2px solid var(--azul); background:transparent}
+.pf-tabs button.on{background:var(--azul); color:#fff}
+.pf-pickrow{display:flex; width:100%; align-items:center; gap:10px; padding:10px 8px; border:none; border-bottom:1px solid #EEE; background:transparent; cursor:pointer; text-align:left}
+.pf-tag{font-size:9px; font-weight:700; margin-left:6px; padding:2px 6px; border-radius:99px}
+.pf-tag.compra{background:#E3ECF7} .pf-tag.venda{background:#FDE8D7}
+.pf-drop{position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:20; background:#fff; border:2px solid var(--azul); border-radius:10px; overflow:hidden; box-shadow:0 8px 24px rgba(20,33,61,.18); max-height:280px; overflow-y:auto}
+.pf-droprow{display:flex; width:100%; align-items:center; gap:10px; padding:10px 14px; border:none; background:#fff; cursor:pointer; text-align:left; border-bottom:1px solid #EEE}
+
 .statusbar{
   background:#fff; border-top:2px solid var(--amarelo); padding:6px 12px; font-size:11.5px;
   color:var(--cinza); display:flex; gap:6px; flex-wrap:wrap; align-items:center; user-select:none;

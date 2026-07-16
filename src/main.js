@@ -307,7 +307,7 @@ function janelaProdutos() {
       <button class="btn-acao" onclick="produtoSimilar()"><kbd>9</kbd>-Produto Similar</button>
       <button class="btn-acao" onclick="totaliza()">Totaliza</button>
       <button class="btn-acao" onclick="analisaProduto()">Analisa Produto</button>
-      <button class="btn-acao" onclick="toast('Integração com PrecificaAí — em breve')"><kbd>L</kbd>-Formação do Preço de Venda</button>
+      <button class="btn-acao" onclick="janelaPrecificar()"><kbd>L</kbd>-Formação do Preço de Venda</button>
       <button class="btn-acao" onclick="stub('Duplicar Produto')"><kbd>M</kbd>-Duplicar Produto</button>
       <button class="btn-acao" onclick="stub('Imagens do Produto')"><kbd>6</kbd>-Imagens</button>
       <button class="btn-acao" onclick="stub('Detalhes do Custo')"><kbd>0</kbd>-Detalhes do Custo</button>
@@ -799,6 +799,387 @@ function janelaBuscaPreco() {
   setTimeout(() => $('#bp-in')?.focus(), 60);
 }
 
+// ─── Precificaí — Formação de Preço de Venda ─────────────────────────────────
+const PF_CATALOGO = [
+  { id: 'ipi',       nome: 'IPI',                   tipo: 'compra', aliquota: 10,   destaque: true, desc: 'Sobre produtos industrializados — alíquota depende do NCM (tabela TIPI)' },
+  { id: 'icms',      nome: 'ICMS',                  tipo: 'compra', aliquota: 18,   desc: 'Imposto estadual sobre circulação de mercadorias' },
+  { id: 'icmsst',    nome: 'ICMS-ST',               tipo: 'compra', aliquota: 7,    desc: 'Substituição tributária — recolhido antecipadamente na compra' },
+  { id: 'pis',       nome: 'PIS',                   tipo: 'venda',  aliquota: 0.65, desc: 'Programa de Integração Social' },
+  { id: 'cofins',    nome: 'COFINS',                tipo: 'venda',  aliquota: 3,    desc: 'Financiamento da Seguridade Social' },
+  { id: 'simples',   nome: 'Simples Nacional',      tipo: 'venda',  aliquota: 6,    desc: 'Guia única (DAS) — % sobre o faturamento, varia por anexo e faixa' },
+  { id: 'iss',       nome: 'ISS',                   tipo: 'venda',  aliquota: 5,    desc: 'Imposto municipal sobre serviços' },
+  { id: 'ii',        nome: 'Imposto de Importação', tipo: 'compra', aliquota: 60,   desc: 'Para produtos importados' },
+  { id: 'frete',     nome: 'Frete',                 tipo: 'compra', aliquota: 5,    desc: 'Custo de transporte sobre o valor da compra' },
+  { id: 'maq',       nome: 'Taxa da maquininha',    tipo: 'venda',  aliquota: 3.5,  desc: 'Taxa do cartão sobre o valor da venda' },
+  { id: 'embalagem', nome: 'Embalagem',             tipo: 'venda',  aliquota: 1.5,  desc: 'Custo de sacola/embalagem por venda' },
+];
+const PF_CORES = ['#E4572E', '#F28F3B', '#C8452C', '#B36A5E', '#E89005', '#A4243B'];
+
+let PF = null; // estado da janela de precificação (null quando fechada)
+let _pfSeq = 1;
+const pfFmt = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pfPc  = v => (v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+
+function pfRoundNice(p, mode) {
+  if (!isFinite(p) || p <= 0) return 0;
+  const cents = Math.ceil(p * 100) / 100, int = Math.floor(cents);
+  const up = f => { let b = int + f; if (b < cents - 1e-9) b = int + 1 + f; return b; };
+  if (mode === 'exato') return cents;
+  if (mode === '00') return cents === int ? int : int + 1;
+  if (mode === '90') return up(0.9);
+  if (mode === '50') return up(0.5);
+  return Math.min(up(0.9), cents === int ? int : int + 1);
+}
+function pfMkTax(cat, aliquota) {
+  return { uid: 'pt' + (_pfSeq++), nome: cat.nome, aliquota: aliquota ?? cat.aliquota, tipo: cat.tipo, destaque: !!cat.destaque };
+}
+function pfNovoCenario(nome, base) {
+  return {
+    key: 'ps' + (_pfSeq++), nome,
+    taxes: base ? base.taxes.map(t => ({ ...t, uid: 'pt' + (_pfSeq++) })) : [pfMkTax(PF_CATALOGO[0]), pfMkTax(PF_CATALOGO[5])],
+    modo: base ? base.modo : 'margem',
+    margem: base ? base.margem : 50,
+    precoManual: base ? base.precoManual : 0,
+    term: base ? base.term : 'auto',
+  };
+}
+function pfCalc(sc) {
+  const custo = PF.custo;
+  const compra = sc.taxes.filter(t => t.tipo === 'compra').map(t => ({ ...t, valor: custo * t.aliquota / 100 }));
+  const custoReal = custo + compra.reduce((s, t) => s + t.valor, 0);
+  const taxaVenda = sc.taxes.filter(t => t.tipo === 'venda').reduce((s, t) => s + t.aliquota, 0) / 100;
+  let preco;
+  if (sc.modo === 'margem') { const teorico = custoReal * (1 + sc.margem / 100) / (1 - taxaVenda); preco = pfRoundNice(teorico, sc.term); }
+  else preco = sc.precoManual || 0;
+  const venda = sc.taxes.filter(t => t.tipo === 'venda').map(t => ({ ...t, valor: preco * t.aliquota / 100 }));
+  const lucro = preco - custoReal - venda.reduce((s, t) => s + t.valor, 0);
+  return { compra, venda, custoReal, preco, lucro,
+    mCusto: custoReal > 0 ? lucro / custoReal * 100 : 0, mVenda: preco > 0 ? lucro / preco * 100 : 0 };
+}
+function pfMelhorKey() {
+  const rs = PF.scens.map(sc => ({ key: sc.key, l: pfCalc(sc).lucro })).filter(x => x.l > 0);
+  if (rs.length < 2) return null;
+  return rs.reduce((a, b) => a.l >= b.l ? a : b).key;
+}
+
+function pfArcPath(cx, cy, rO, rI, a0, a1) {
+  const P = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const large = (a1 - a0) > Math.PI ? 1 : 0;
+  const [x0, y0] = P(rO, a0), [x1, y1] = P(rO, a1), [x2, y2] = P(rI, a1), [x3, y3] = P(rI, a0);
+  return `M${x0} ${y0} A${rO} ${rO} 0 ${large} 1 ${x1} ${y1} L${x2} ${y2} A${rI} ${rI} 0 ${large} 0 ${x3} ${y3} Z`;
+}
+function pfDonutSVG(slices) {
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  if (total <= 0) return `<svg width="88" height="88"></svg>`;
+  let a = -Math.PI / 2, paths = '';
+  for (const s of slices) {
+    const frac = s.value / total; let a1 = a + frac * 2 * Math.PI;
+    const gap = slices.length > 1 ? 0.03 : 0;
+    if (frac >= 0.9999) paths += `<circle cx="44" cy="44" r="32" fill="none" stroke="${s.color}" stroke-width="20"/>`;
+    else paths += `<path d="${pfArcPath(44, 44, 42, 22, a + gap / 2, Math.max(a1 - gap / 2, a + gap / 2 + 0.001))}" fill="${s.color}"/>`;
+    a = a1;
+  }
+  return `<svg width="88" height="88" viewBox="0 0 88 88">${paths}</svg>`;
+}
+function pfPieData(r) {
+  const arr = [{ name: 'Custo do produto', value: Math.max(PF.custo, 0), color: '#14213D' }];
+  [...r.compra, ...r.venda].forEach((t, i) => arr.push({ name: `${t.nome} (${t.tipo})`, value: Math.max(t.valor, 0), color: PF_CORES[i % PF_CORES.length] }));
+  if (r.lucro > 0) arr.push({ name: 'Seu lucro', value: r.lucro, color: '#1E7A52' });
+  return arr.filter(s => s.value > 0.005);
+}
+
+function pfColResultadoHTML(sc, r) {
+  const pie = pfPieData(r);
+  const int = Math.floor(r.preco), cent = String(Math.round((r.preco % 1) * 100)).padStart(2, '0');
+  const legenda = pie.map(s => `<div><span class="sw" style="background:${s.color}"></span><span class="nm">${s.name}</span><b>${pfFmt(s.value)}</b></div>`).join('');
+  const lucro = r.lucro >= 0
+    ? `<div class="pf-lucrobox ok"><b>Sobra ${pfFmt(r.lucro)}</b><span style="opacity:.7"> · ${pfPc(r.mCusto)} s/ custo · ${pfPc(r.mVenda)} da venda</span></div>`
+    : `<div class="pf-lucrobox ruim"><b style="color:var(--vermelho)">Prejuízo de ${pfFmt(-r.lucro)} por unidade</b></div>`;
+  return `<div style="display:flex;align-items:center;gap:8px">
+      <div class="pf-etiqueta"><div class="t">PREÇO</div>
+        <div class="p"><span style="font-size:10px;vertical-align:top">R$</span><span style="font-size:28px">${int}</span><span style="font-size:13px;vertical-align:top">,${cent}</span></div>
+      </div>
+      <div>${pfDonutSVG(pie)}</div>
+    </div>
+    <div class="pf-legenda">${legenda}</div>${lucro}`;
+}
+
+function pfTaxRowHTML(sc, t) {
+  return `<div class="pf-taxrow${t.destaque ? ' destaque' : ''}">
+    <span class="nome">${t.nome}</span>
+    <input type="number" min="0" step="0.5" value="${t.aliquota}" class="inp"
+      style="width:52px;padding:3px 5px;font-size:12px;text-align:right;font-weight:700"
+      data-pf-act="aliq" data-sc="${sc.key}" data-tax="${t.uid}">
+    <span style="font-size:11px;font-weight:700">%</span>
+    <button class="pf-mini" style="font-size:9px;padding:3px 5px" data-pf-act="tipo" data-sc="${sc.key}" data-tax="${t.uid}"
+      title="Trocar entre compra e venda">${t.tipo === 'compra' ? 'COMPRA' : 'VENDA'}</button>
+    <button class="pf-mini red" style="padding:3px 6px" data-pf-act="rmtax" data-sc="${sc.key}" data-tax="${t.uid}" title="Tirar imposto">✕</button>
+  </div>`;
+}
+
+function pfColHTML(sc) {
+  const taxes = sc.taxes.length
+    ? sc.taxes.map(t => pfTaxRowHTML(sc, t)).join('')
+    : `<div style="font-size:12px;opacity:.55;padding:6px 2px;margin-bottom:5px">Nenhum imposto — o preço será só custo + lucro.</div>`;
+  const chips = [['auto', ',90/,00'], ['90', ',90'], ['00', ',00'], ['50', ',50'], ['exato', 'exato']]
+    .map(([v, l]) => `<button class="pf-chip${sc.term === v ? ' on' : ''}" data-pf-act="term" data-sc="${sc.key}" data-v="${v}">${l}</button>`).join('');
+  const controle = sc.modo === 'margem'
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="range" min="5" max="200" step="5" value="${sc.margem}" style="flex:1" data-pf-act="margem" data-sc="${sc.key}">
+        <input type="number" value="${sc.margem}" class="inp" style="width:52px;padding:3px 5px;text-align:right;font-weight:700" data-pf-act="margemN" data-sc="${sc.key}">
+        <b style="font-size:12px">%</b></div>
+       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">${chips}</div>`
+    : `<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><b>R$</b>
+        <input type="number" min="0" step="0.1" value="${sc.precoManual}" class="inp" style="width:100px;font-weight:700;font-size:16px" data-pf-act="precoM" data-sc="${sc.key}"></div>`;
+  return `<div class="pf-col" data-pf-col="${sc.key}">
+    <div class="pf-badge">★ MAIOR LUCRO</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <input value="${sc.nome}" class="inp" style="border:2px dashed var(--linha);flex:1;font-weight:700;min-width:0" data-pf-act="nome" data-sc="${sc.key}">
+      <button class="pf-mini" data-pf-act="dup" data-sc="${sc.key}" title="Duplicar">⧉</button>
+      ${PF.scens.length > 1 ? `<button class="pf-mini red" data-pf-act="rmsc" data-sc="${sc.key}" title="Remover simulação">✕</button>` : ''}
+    </div>
+    <div>${taxes}</div>
+    <button class="pf-ghost" style="margin-bottom:10px" data-pf-act="openpicker" data-sc="${sc.key}">+ Adicionar imposto ou custo</button>
+    <div class="pf-modo">
+      <button class="${sc.modo === 'margem' ? 'on' : ''}" data-pf-act="modo" data-sc="${sc.key}" data-v="margem">Lucro %</button>
+      <button class="${sc.modo === 'preco' ? 'on' : ''}" data-pf-act="modo" data-sc="${sc.key}" data-v="preco">Preço fixo</button>
+    </div>
+    ${controle}
+    <div data-pf-res="${sc.key}"></div>
+  </div>`;
+}
+
+function pfRenderRail() {
+  const rail = $('#pf-rail'); if (!rail) return;
+  rail.innerHTML = PF.scens.map(pfColHTML).join('') +
+    `<div class="pf-col" style="display:flex;align-items:stretch;background:transparent;border:none;padding:0">
+      <button data-pf-act="addsc" style="width:100%;min-height:220px;border:2px dashed var(--azul);border-radius:16px;background:transparent;font-weight:700;font-size:15px;cursor:pointer">+ Nova simulação</button>
+    </div>`;
+  pfUpdateResultados();
+}
+
+function pfUpdateResultados() {
+  const mk = pfMelhorKey();
+  const rs = {};
+  for (const sc of PF.scens) {
+    const r = pfCalc(sc); rs[sc.key] = r;
+    const el = $(`[data-pf-res="${sc.key}"]`);
+    if (el) el.innerHTML = pfColResultadoHTML(sc, r);
+    const col = $(`[data-pf-col="${sc.key}"]`);
+    if (col) col.classList.toggle('melhor', sc.key === mk);
+  }
+  const sel = $('#pf-savesel'); if (!sel) return;
+  const atual = PF.scens.some(s => s.key === PF.saveSel) ? PF.saveSel : '';
+  PF.saveSel = atual;
+  sel.innerHTML = `<option value="">Escolha a simulação…</option>` +
+    PF.scens.map(sc => `<option value="${sc.key}"${sc.key === atual ? ' selected' : ''}>${sc.nome} → ${pfFmt(rs[sc.key].preco)}${sc.key === mk ? ' ★' : ''}</option>`).join('');
+  const btn = $('#pf-savebtn'); if (btn) btn.classList.toggle('on', !!atual);
+}
+
+function pfRenderCard() {
+  const host = $('#pf-card'); if (!host) return;
+  if (!PF.produto) { host.innerHTML = `<div style="text-align:center;padding:28px 0;color:var(--cinza)">Busque um produto acima para começar a simulação de preço.</div>`; return; }
+  const p = PF.produto;
+  host.innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#FAFBFC;border:1.5px solid var(--linha);border-radius:10px;padding:10px 14px;margin-bottom:10px">
+    <div style="flex:1;min-width:160px">
+      <div style="font-weight:700">${p.nome}</div>
+      <div style="font-size:11px;color:var(--cinza)">cód. ${p.cod}</div>
+    </div>
+    <label style="font-size:12px;font-weight:700;color:var(--azul)">Custo de compra</label>
+    <div style="display:flex;align-items:center;gap:4px"><b>R$</b>
+      <input type="number" min="0" step="0.01" value="${PF.custo}" class="inp" style="width:90px;font-weight:700;text-align:right" data-pf-act="custo">
+    </div>
+  </div>`;
+}
+
+function pfRenderDrop() {
+  const drop = $('#pf-drop'); if (!drop) return;
+  const q = PF.busca.trim().toLowerCase();
+  const lista = q ? PF.produtos.filter(p => p.nome.toLowerCase().includes(q) || (p.cod || '').toLowerCase().includes(q)) : PF.produtos.slice(0, 12);
+  drop.innerHTML = lista.length
+    ? lista.map(p => `<button class="pf-droprow" data-pf-act="pickprod" data-id="${p.id}">
+        <div style="flex:1"><div style="font-weight:700;font-size:14px">${p.nome}</div>
+        <div style="font-size:11px;color:var(--cinza)">cód. ${p.cod}</div></div>
+        <b style="font-size:13px">${pfFmt(p.custo || 0)}</b></button>`).join('')
+    : `<div style="padding:14px;font-size:13px;color:var(--cinza)">Nenhum produto encontrado.</div>`;
+  drop.style.display = 'block';
+}
+
+function pfRenderPicker() {
+  const host = $('#pf-picker-host'); if (!host) return;
+  if (!PF.picker) { host.innerHTML = ''; return; }
+  const q = PF.pickQ.trim().toLowerCase();
+  let corpo = '';
+  if (PF.pickTab === 'lista') {
+    const f = !q ? PF_CATALOGO : PF_CATALOGO.filter(c => c.nome.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q));
+    corpo = f.map(c => `<button class="pf-pickrow" data-pf-act="addcat" data-id="${c.id}">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${c.nome}
+        <span class="pf-tag ${c.tipo}">${c.tipo === 'compra' ? 'NA COMPRA' : 'NA VENDA'}</span></div>
+        <div style="font-size:11px;color:var(--cinza)">${c.desc}</div></div>
+      <b style="font-size:13px;flex-shrink:0">${c.aliquota}%</b></button>`).join('');
+  } else {
+    corpo = `<div style="display:flex;flex-direction:column;gap:8px">
+      <input id="pf-cx-nome" class="inp" placeholder="Nome (ex: Comissão do vendedor)" style="width:100%">
+      <div style="display:flex;gap:8px">
+        <input id="pf-cx-aliq" class="inp" type="number" min="0" placeholder="Alíquota %" style="width:110px">
+        <select id="pf-cx-tipo" class="inp" style="flex:1">
+          <option value="venda">incide na venda (desconta do preço)</option>
+          <option value="compra">incide na compra (entra no custo)</option>
+        </select>
+      </div>
+      <button data-pf-act="addcustom" class="btn-acao primario">Adicionar à simulação</button>
+    </div>`;
+  }
+  host.innerHTML = `<div class="pf-overlay" data-pf-act="closepicker">
+    <div class="pf-sheet" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;margin-bottom:10px">
+        <b style="flex:1;font-size:16px">Adicionar imposto ou custo</b>
+        <button class="pf-mini" data-pf-act="closepicker">✕</button>
+      </div>
+      <div class="pf-tabs">
+        <button class="${PF.pickTab === 'lista' ? 'on' : ''}" data-pf-act="picktab" data-v="lista">Lista</button>
+        <button class="${PF.pickTab === 'custom' ? 'on' : ''}" data-pf-act="picktab" data-v="custom">Criar novo</button>
+      </div>
+      ${PF.pickTab !== 'custom' ? `<input id="pf-pickq" class="inp" style="width:100%;margin-bottom:10px" value="${PF.pickQ}" placeholder="Buscar imposto pelo nome…">` : ''}
+      <div style="overflow-y:auto;flex:1">${corpo}</div>
+    </div></div>`;
+  const pq = $('#pf-pickq');
+  if (pq) pq.addEventListener('input', e => { PF.pickQ = e.target.value; const pos = e.target.selectionStart; pfRenderPicker(); const el = $('#pf-pickq'); if (el) { el.focus(); el.setSelectionRange(pos, pos); } });
+}
+
+function pfRenderConfirm() {
+  const host = $('#pf-confirm-host'); if (!host) return;
+  const sc = PF.scens.find(s => s.key === PF.saveSel);
+  if (!PF.confirm || !sc) { host.innerHTML = ''; return; }
+  const r = pfCalc(sc);
+  host.innerHTML = `<div class="pf-overlay center" data-pf-act="closeconfirm">
+    <div class="pf-modal" onclick="event.stopPropagation()">
+      <div style="font-weight:900;font-size:18px;margin-bottom:4px">Confirmar novo preço?</div>
+      <div style="font-size:13px;color:var(--cinza);margin-bottom:14px">O preço abaixo será salvo no cadastro do produto.</div>
+      <div style="background:var(--fundo);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:14px">${PF.produto.nome}</div>
+        <div style="font-size:11px;color:var(--cinza);margin-bottom:8px">cód. ${PF.produto.cod} · simulação: <b>${sc.nome}</b></div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="background:var(--amarelo);border-radius:8px;padding:6px 12px;font-weight:900;font-size:22px">${pfFmt(r.preco)}</div>
+          <div style="font-size:12px">
+            <div>Lucro: <b style="color:${r.lucro >= 0 ? 'var(--verde)' : 'var(--vermelho)'}">${pfFmt(r.lucro)}</b> por unidade</div>
+            <div style="color:var(--cinza)">${pfPc(r.mCusto)} sobre o custo</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-acao" style="flex:1" data-pf-act="closeconfirm">Cancelar</button>
+        <button class="btn-acao primario" style="flex:1" data-pf-act="doconfirm" id="pf-confirm-btn">Confirmar</button>
+      </div>
+    </div></div>`;
+}
+
+async function janelaPrecificar() {
+  abrirJanela('Precificaí — Formação de Preço de Venda', `
+    <div style="position:relative;margin-bottom:10px">
+      <input id="pf-busca" class="inp" style="width:100%;padding:11px 12px;font-size:14px" placeholder="🔍 Buscar produto por nome ou código…" autocomplete="off">
+      <div id="pf-drop" class="pf-drop" style="display:none"></div>
+    </div>
+    <div id="pf-card"></div>
+    <div style="font-size:12px;color:var(--cinza);margin:6px 2px 8px">Monte simulações lado a lado e compare — deslize para o lado →</div>
+    <div id="pf-rail" class="pf-rail"></div>
+    <div class="pf-savebar">
+      <div class="in">
+        <select id="pf-savesel" class="inp"><option value="">Escolha a simulação…</option></select>
+        <button id="pf-savebtn" class="btn">Salvar novo preço</button>
+      </div>
+    </div>
+    <div id="pf-picker-host"></div>
+    <div id="pf-confirm-host"></div>`, 1040);
+
+  PF = { produtos: [], produto: null, custo: 0, busca: '', scens: [pfNovoCenario('Simulação 1')], saveSel: '', picker: null, pickTab: 'lista', pickQ: '', confirm: false };
+  pfRenderCard(); pfRenderRail();
+
+  try { PF.produtos = await apiFetch('/produtos'); } catch (e) { toast(e.message); }
+  pfRenderDrop();
+
+  $('#pf-busca').addEventListener('focus', () => pfRenderDrop());
+  $('#pf-busca').addEventListener('input', e => { PF.busca = e.target.value; pfRenderDrop(); });
+  $('#pf-savesel').addEventListener('change', e => { PF.saveSel = e.target.value; pfUpdateResultados(); });
+  $('#pf-savebtn').addEventListener('click', () => {
+    if (!PF.scens.some(s => s.key === PF.saveSel)) return;
+    PF.confirm = true; pfRenderConfirm();
+  });
+}
+
+async function pfSalvarPreco() {
+  const sc = PF.scens.find(s => s.key === PF.saveSel);
+  if (!sc || !PF.produto) return;
+  const r = pfCalc(sc);
+  const btn = $('#pf-confirm-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
+  try {
+    await apiFetch(`/produtos/${PF.produto.id}/preco`, { method: 'PATCH', body: { preco: r.preco, precoMin: +(r.preco * 0.9).toFixed(2) } });
+    toast(`${PF.produto.nome} atualizado: novo preço de venda <b>${pfFmt(r.preco)}</b>`);
+    PF.confirm = false; pfRenderConfirm();
+    const idx = PF.produtos.findIndex(p => p.id === PF.produto.id);
+    if (idx >= 0) { PF.produtos[idx].preco = r.preco; PF.produtos[idx].precoMin = r.preco * 0.9; }
+  } catch (e) {
+    toast(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirmar'; }
+  }
+}
+
+// Delegação de eventos da janela de Precificaí
+document.addEventListener('click', e => {
+  if (!PF) return;
+  const el = e.target.closest('[data-pf-act]'); if (!el) return;
+  const act = el.dataset.pfAct;
+  const sc = el.dataset.sc ? PF.scens.find(s => s.key === el.dataset.sc) : null;
+  switch (act) {
+    case 'pickprod': {
+      const p = PF.produtos.find(x => x.id === el.dataset.id);
+      PF.produto = p; PF.custo = p.custo || 0;
+      $('#pf-busca').value = ''; PF.busca = '';
+      $('#pf-drop').style.display = 'none';
+      pfRenderCard(); pfUpdateResultados(); break;
+    }
+    case 'tipo': { const t = sc.taxes.find(t => t.uid === el.dataset.tax); t.tipo = t.tipo === 'compra' ? 'venda' : 'compra'; pfRenderRail(); break; }
+    case 'rmtax': sc.taxes = sc.taxes.filter(t => t.uid !== el.dataset.tax); pfRenderRail(); break;
+    case 'dup': PF.scens.push(pfNovoCenario(sc.nome + ' (cópia)', sc)); pfRenderRail(); break;
+    case 'rmsc': PF.scens = PF.scens.filter(s => s.key !== sc.key); pfRenderRail(); break;
+    case 'addsc': PF.scens.push(pfNovoCenario('Simulação ' + (PF.scens.length + 1))); pfRenderRail(); break;
+    case 'modo': sc.modo = el.dataset.v; pfRenderRail(); break;
+    case 'term': sc.term = el.dataset.v; pfRenderRail(); break;
+    case 'openpicker': PF.picker = el.dataset.sc; PF.pickTab = 'lista'; PF.pickQ = ''; pfRenderPicker(); break;
+    case 'closepicker': PF.picker = null; pfRenderPicker(); break;
+    case 'picktab': PF.pickTab = el.dataset.v; PF.pickQ = ''; pfRenderPicker(); break;
+    case 'addcat': { const c = PF_CATALOGO.find(x => x.id === el.dataset.id); PF.scens.find(s => s.key === PF.picker).taxes.push(pfMkTax(c)); PF.picker = null; pfRenderPicker(); pfRenderRail(); break; }
+    case 'addcustom': {
+      const nome = $('#pf-cx-nome').value.trim();
+      const a = parseFloat(String($('#pf-cx-aliq').value).replace(',', '.'));
+      const tipo = $('#pf-cx-tipo').value;
+      if (!nome || !isFinite(a) || a <= 0) return;
+      PF.scens.find(s => s.key === PF.picker).taxes.push({ uid: 'pt' + (_pfSeq++), nome, aliquota: a, tipo, destaque: false });
+      PF.picker = null; pfRenderPicker(); pfRenderRail(); break;
+    }
+    case 'closeconfirm': PF.confirm = false; pfRenderConfirm(); break;
+    case 'doconfirm': pfSalvarPreco(); break;
+  }
+});
+document.addEventListener('input', e => {
+  if (!PF) return;
+  const el = e.target.closest('[data-pf-act]'); if (!el) return;
+  const sc = el.dataset.sc ? PF.scens.find(s => s.key === el.dataset.sc) : null;
+  const v = parseFloat(el.value);
+  switch (el.dataset.pfAct) {
+    case 'custo': PF.custo = isFinite(v) ? v : 0; pfUpdateResultados(); break;
+    case 'aliq': { const t = sc.taxes.find(t => t.uid === el.dataset.tax); t.aliquota = isFinite(v) ? v : 0; pfUpdateResultados(); break; }
+    case 'margem': case 'margemN': {
+      sc.margem = isFinite(v) ? v : 0;
+      const col = $(`[data-pf-col="${sc.key}"]`);
+      col.querySelectorAll('[data-pf-act="margem"],[data-pf-act="margemN"]').forEach(i => { if (i !== el) i.value = sc.margem; });
+      pfUpdateResultados(); break;
+    }
+    case 'precoM': sc.precoManual = isFinite(v) ? v : 0; pfUpdateResultados(); break;
+    case 'nome': sc.nome = el.value; pfUpdateResultados(); break;
+  }
+});
+
 // ─── Relatórios ───────────────────────────────────────────────────────────────
 async function janelaRelEstoque() {
   abrirJanela('Estoque Atual por Filial', `
@@ -1118,7 +1499,7 @@ const MENUS = [
     { rot: '2 - Vendedores e Usuários…', ac: janelaVendedores },
     { rot: '3 - Produtos', sub: [
       { rot: '1 - Produtos…', tecla: 'F7', ac: janelaProdutos },
-      { rot: 'B - Formação de Preço Padrão…', ac: () => toast('Integração com <b>PrecificaAí</b> — em breve') },
+      { rot: 'B - Formação de Preço Padrão…', tecla: 'F6', ac: janelaPrecificar },
     ]},
     { rot: '5 - Fornecedores…', tecla: 'F3', ac: () => stub('Fornecedores') },
     { rot: 'A - Filiais…', ac: janelaFiliais },
@@ -1133,7 +1514,7 @@ const MENUS = [
       { rot: '2 - Ponto de Reposição…', ac: janelaReposicao },
       { rot: '3 - Conferências e ajustes', ac: janelaAjuste },
     ]},
-    { rot: '8 - Manutenção de Preços', ac: () => toast('Integração com <b>PrecificaAí</b> — em breve') },
+    { rot: '8 - Manutenção de Preços', tecla: 'F6', ac: janelaPrecificar },
     { rot: '9 - Operações com Filiais', sub: [
       { rot: '1 - Transferência entre Filiais…', ac: () => janelaTransferencia() },
     ]},
@@ -1206,6 +1587,7 @@ const FERRAMENTAS = [
   { ico: '🏷️', atalho: 'Ctrl+F7', rot: 'Busca Preço', ac: janelaBuscaPreco },
   { ico: '🧺', atalho: 'Ctrl+F6', rot: 'Compras', ac: janelaEntradaNF },
   { ico: '↔️', atalho: 'Ctrl+T', rot: 'Transferir', ac: () => janelaTransferencia() },
+  { ico: '💰', atalho: 'F6', rot: 'Precificar', ac: janelaPrecificar },
   { ico: '📊', atalho: 'F5', rot: 'Rel.Estoque', ac: janelaRelEstoque },
   { ico: '⚠️', atalho: 'F4', rot: 'Reposição', ac: janelaReposicao },
   { ico: '📋', atalho: 'F3', rot: 'Histórico', ac: janelaHistorico },
@@ -1227,6 +1609,7 @@ document.addEventListener('keydown', e => {
   const mapa = {
     'F7': janelaProdutos, 'CTRL+F7': janelaBuscaPreco,
     'CTRL+F6': janelaEntradaNF, 'CTRL+T': () => janelaTransferencia(),
+    'F6': janelaPrecificar,
     'F4': janelaReposicao, 'F5': janelaRelEstoque, 'F3': janelaHistorico,
   };
   const fn = mapa[combo];
@@ -1253,7 +1636,7 @@ Object.assign(window, {
   entrar, trocarAba, abrirCadastroGestor, registrarGestor, fecharCadastro, buscarCepCadastro,
   selecionarFilialLogin,
   fecharJanela, fecharMenus, stub,
-  janelaProdutos, janelaBuscaPreco, janelaEntradaNF,
+  janelaProdutos, janelaBuscaPreco, janelaEntradaNF, janelaPrecificar,
   janelaEntradaSaida, janelaTransferencia, janelaAjuste,
   janelaReposicao, janelaRelEstoque, janelaHistorico, janelaFiliais,
   trocarFilial, detalhesEstoque, produtoSimilar, totaliza, analisaProduto,
