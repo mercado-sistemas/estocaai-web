@@ -1570,7 +1570,7 @@ async function buscarVendedores() {
     if (_vendedores.length > 0) _vendSel = _vendedores[0].id;
     tb.innerHTML = _vendedores.map(v => `
       <tr class="${v.id === _vendSel ? 'sel' : ''}" onclick="_vendSel='${v.id}'; document.querySelectorAll('#grid-vend tbody tr').forEach(r=>r.classList.remove('sel')); this.classList.add('sel')">
-        <td>${v.username}</td>
+        <td>${v.nome}</td>
         <td>${v.role === 'GESTAO' ? 'Gestão' : 'Caixa'}</td>
         <td>${(v.lojas || []).join(', ') || '—'}</td>
         <td><b style="color:${v.ativo !== false ? 'var(--verde)' : 'var(--vermelho)'}">${v.ativo !== false ? 'Ativo' : 'Inativo'}</b></td>
@@ -1594,9 +1594,9 @@ function _formVendedor(v) {
     </label>`;
   }).join('');
 
-  abrirJanela(v ? `Alterar Funcionário — ${v.username}` : 'Incluir Funcionário', `
+  abrirJanela(v ? `Alterar Funcionário — ${v.nome}` : 'Incluir Funcionário', `
     <form onsubmit="salvarVendedor(event,'${v?.id || ''}')">
-      <div class="form-linha"><label>Username *</label><input id="fv-login" value="${v?.username || ''}" required autocomplete="off"></div>
+      <div class="form-linha"><label>Nome *</label><input id="fv-login" value="${v?.nome || ''}" required autocomplete="off"></div>
       <div class="form-linha"><label>${v ? 'Nova Senha' : 'Senha *'}</label>
         <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required minlength="6"' : 'minlength="6"'}
           placeholder="${v ? 'deixe em branco para manter' : 'mínimo 6 caracteres'}"></div>
@@ -1618,12 +1618,12 @@ function _formVendedor(v) {
 }
 async function salvarVendedor(e, id) {
   e.preventDefault();
-  const username = $('#fv-login').value.trim();
+  const nome = $('#fv-login').value.trim();
   const senha = $('#fv-senha').value;
-  if (!username) return toast('Username é obrigatório.');
+  if (!nome) return toast('Nome é obrigatório.');
   if (!id && !senha) return toast('Senha é obrigatória para novo funcionário.');
   const lojas = [...document.querySelectorAll('input[name="loja"]:checked')].map(c => c.value);
-  const body = { username, role: $('#fv-perfil').value, lojas };
+  const body = { nome, role: $('#fv-perfil').value, lojas };
   if (senha) body.senha = senha;
   const btn = $('#btn-fv'); btn.disabled = true; btn.textContent = 'Gravando…';
   try {
