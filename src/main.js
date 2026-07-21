@@ -425,31 +425,350 @@ function abrirEditarProduto() {
   if (!p) return toast('Selecione um produto para alterar.');
   _formProduto(p);
 }
+/* ─── Incluir/Alterar Produto ──────────────────────────────────────────────────
+   O campo Código também busca: digitou um código já cadastrado (ou o nome), a
+   tela vira "Alterar" e mostra o estoque. A faixa de quantidade grava cadastro e
+   entrada de estoque de uma vez, e o painel da NF-e traz os itens do fornecedor
+   sem digitação. */
+let FP = { produto: null, nota: null, buscaTimer: null };
+
 function _formProduto(p) {
-  const titulo = p ? `Alterar Produto — ${p.cod}` : 'Incluir Produto';
-  abrirJanela(titulo, `
-    <form onsubmit="salvarProduto(event,'${p?.id || ''}')">
-      <div class="form-linha">
-        <label>Código *</label>
-        <div style="display:flex; gap:6px">
-          <input id="fp-cod" value="${p?.cod || ''}" required style="flex:1">
-          <button class="btn-acao primario" type="button" onclick="escanearPeloCelular()"
-                  title="Escanear o código do produto pelo celular">📷 Escanear</button>
+  FP = { produto: p || null, nota: null, buscaTimer: null };
+  abrirJanela('Incluir Produto', `
+    <div style="display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:14px; align-items:start">
+      <form onsubmit="salvarProduto(event)">
+        <div class="form-linha">
+          <label>Código *</label>
+          <div style="position:relative; flex:1">
+            <div style="display:flex; gap:6px">
+              <input id="fp-cod" placeholder="Bipe, digite o código ou o nome…" autocomplete="off" required style="flex:1">
+              <button class="btn-acao primario" type="button" onclick="escanearPeloCelular()"
+                      title="Escanear o código do produto pelo celular">📷</button>
+            </div>
+            <div id="fp-sug"></div>
+          </div>
         </div>
-      </div>
-      <div class="form-linha"><label>Descrição *</label><input id="fp-nome" value="${p?.nome || ''}" required></div>
-      <div class="form-linha"><label>UN</label><input id="fp-un" value="${p?.un || 'UN'}"></div>
-      <div class="form-linha"><label>Grupo</label><input id="fp-grupo" value="${p?.grupo || ''}"></div>
-      <div class="form-linha"><label>Est. Mínimo</label><input id="fp-min" type="number" min="0" value="${p?.min || 0}"></div>
-      <div class="form-linha"><label>Custo (R$)</label><input id="fp-custo" type="number" step="any" min="0" value="${p?.custo || ''}"></div>
-      <div class="form-linha"><label>Preço Venda *</label><input id="fp-preco" type="number" step="any" min="0.01" value="${p?.preco || ''}" required></div>
-      <div class="form-linha"><label>Preço Mínimo</label><input id="fp-precoMin" type="number" step="any" min="0" value="${p?.precoMin || ''}"></div>
-      <div class="rodape-form">
-        <button class="btn-acao" type="button" onclick="janelaProdutos()">(ESC) Voltar</button>
-        <button class="btn-acao primario" type="submit" id="btn-salvar-prod">Gravar</button>
-      </div>
-    </form>`, 620);
+        <div class="form-linha"><label>Descrição *</label><input id="fp-nome" required></div>
+        <div class="form-linha"><label>UN</label><input id="fp-un" value="UN" list="fp-uns">
+          <datalist id="fp-uns"><option>UN</option><option>KG</option><option>CX</option><option>LT</option><option>MT</option><option>PC</option></datalist>
+        </div>
+        <div class="form-linha"><label>Grupo</label><input id="fp-grupo" list="fp-grupos">
+          <datalist id="fp-grupos"></datalist>
+        </div>
+        <div class="form-linha"><label>Est. Mínimo</label><input id="fp-min" type="number" min="0" value="0"></div>
+        <div class="form-linha"><label>Custo (R$)</label><input id="fp-custo" type="number" step="any" min="0"></div>
+        <div class="form-linha"><label>Preço Venda *</label><input id="fp-preco" type="number" step="any" min="0.01" required></div>
+        <div class="form-linha"><label>Preço Mínimo</label><input id="fp-precoMin" type="number" step="any" min="0"></div>
+
+        <div id="fp-estoque" style="margin-top:10px"></div>
+
+        <div class="rodape-form">
+          <button class="btn-acao" type="button" onclick="janelaProdutos()">(ESC) Voltar</button>
+          <button class="btn-acao primario" type="submit" id="btn-salvar-prod">Gravar e continuar</button>
+        </div>
+      </form>
+
+      <div id="fp-nfe"></div>
+    </div>`, 940);
+
+  $('#fp-cod').addEventListener('input', fpBuscaCodigo);
+  $('#fp-cod').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const s = document.querySelector('#fp-sug .fp-sug-item');
+      if (s) s.click(); else $('#fp-nome').focus();
+    }
+  });
+  fpGrupos();
+  if (p) fpCarregar(p); else fpRender();
   setTimeout(() => $('#fp-cod')?.focus(), 60);
+}
+
+/** Alimenta o datalist de grupos com os que já existem no cadastro. */
+function fpGrupos() {
+  const grupos = [...new Set(PRODUTOS.map(x => x.grupo).filter(Boolean))].sort();
+  const dl = $('#fp-grupos');
+  if (dl) dl.innerHTML = grupos.map(g => `<option>${g}</option>`).join('');
+}
+
+function fpBuscaCodigo() {
+  const q = $('#fp-cod').value.trim();
+  clearTimeout(FP.buscaTimer);
+  if (!q) { FP.produto = null; fpRender(); fpSugestoes([]); return; }
+
+  FP.buscaTimer = setTimeout(async () => {
+    try {
+      const achados = await apiFetch(`/produtos?busca=${encodeURIComponent(q)}`);
+      const exato = achados.find(x => (x.cod || '').toLowerCase() === q.toLowerCase());
+      if (exato) { fpSugestoes([]); return fpCarregar(exato); }
+
+      if (FP.produto) { FP.produto = null; fpLimparCampos(false); }
+      fpRender();
+      fpSugestoes(achados.slice(0, 6));
+    } catch (e) {
+      // busca é auxiliar: falha não pode travar a digitação
+    }
+  }, 250);
+}
+
+function fpSugestoes(lista) {
+  const alvo = $('#fp-sug');
+  if (!alvo) return;
+  if (!lista.length) { alvo.innerHTML = ''; return; }
+  alvo.innerHTML = `<div style="position:absolute; z-index:9; width:100%; background:#fff; border:1px solid var(--linha);
+      border-radius:6px; box-shadow:0 8px 20px rgba(20,33,61,.18); overflow:hidden">
+    ${lista.map(x => `<div class="fp-sug-item" onclick="fpEscolher('${x.id}')"
+        style="display:flex; gap:10px; align-items:center; padding:7px 10px; cursor:pointer; border-bottom:1px solid var(--linha); font-size:13px">
+        <b style="min-width:70px">${x.cod}</b><span style="flex:1">${x.nome}</span>
+        <span style="font-size:11px; color:var(--cinza)">${fpTotal(x)} un</span>
+      </div>`).join('')}</div>`;
+  alvo.querySelectorAll('.fp-sug-item').forEach(el => {
+    el.onmouseenter = () => el.style.background = '#DCE6FA';
+    el.onmouseleave = () => el.style.background = '';
+  });
+}
+
+const fpTotal = (x) => FILIAIS.reduce((s, f) => s + ((x.saldo ?? {})[f.id] || 0), 0);
+
+async function fpEscolher(id) {
+  fpSugestoes([]);
+  let achado = PRODUTOS.find(x => x.id === id);
+  if (!achado) {
+    try { PRODUTOS = await apiFetch('/produtos'); achado = PRODUTOS.find(x => x.id === id); }
+    catch (e) { return toast(e.message); }
+  }
+  if (achado) fpCarregar(achado);
+}
+
+function fpCarregar(p) {
+  FP.produto = p;
+  $('#fp-cod').value = p.cod || '';
+  $('#fp-nome').value = p.nome || '';
+  $('#fp-un').value = p.un || 'UN';
+  $('#fp-grupo').value = p.grupo || '';
+  $('#fp-min').value = p.min ?? 0;
+  $('#fp-custo').value = p.custo ?? '';
+  $('#fp-preco').value = p.preco ?? '';
+  $('#fp-precoMin').value = p.precoMin ?? '';
+  fpRender();
+}
+
+function fpLimparCampos(limparCodigo) {
+  if (limparCodigo) $('#fp-cod').value = '';
+  ['fp-nome', 'fp-grupo', 'fp-custo', 'fp-preco', 'fp-precoMin'].forEach(id => { const el = $('#' + id); if (el) el.value = ''; });
+  $('#fp-un').value = 'UN';
+  $('#fp-min').value = 0;
+}
+
+function fpRender() {
+  const p = FP.produto;
+  const cab = document.querySelector('#janela-ativa .tit');
+  if (cab) cab.textContent = p ? `Alterar Produto — ${p.cod}` : 'Incluir Produto';
+  const btn = $('#btn-salvar-prod');
+  if (btn) btn.textContent = p ? 'Salvar e lançar' : 'Gravar e continuar';
+  const est = $('#fp-estoque'); if (est) est.innerHTML = fpPainelEstoque(p);
+  const nfe = $('#fp-nfe'); if (nfe) nfe.innerHTML = fpPainelNfe();
+}
+
+function fpPainelEstoque(p) {
+  const qtd = Number($('#fp-qtd')?.value) || 0;
+  const filSel = $('#fp-fil')?.value || (filialAtual !== 'todas' ? filialAtual : FILIAIS[0]?.id);
+  if (!FILIAIS.length) {
+    return `<div style="border:1px solid var(--linha); border-radius:6px; padding:10px; font-size:12px; color:var(--cinza)">
+      Cadastre uma filial para conseguir lançar estoque.</div>`;
+  }
+
+  const saldos = p ? FILIAIS.map(f => {
+    const s = (p.saldo ?? {})[f.id] || 0;
+    const cor = s === 0 ? 'var(--vermelho)' : (s <= (p.min || 0) ? '#9A6212' : 'var(--verde)');
+    return `<span style="margin-right:12px"><b style="color:${cor}">${s}</b> <span style="color:var(--cinza)">${f.id}</span></span>`;
+  }).join('') : '';
+
+  return `<div style="border:1px solid var(--amarelo-2); background:var(--amarelo-bg); border-radius:6px; padding:10px 12px">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+      <b style="font-size:11px; letter-spacing:.5px; text-transform:uppercase">${p ? 'Entrada de estoque' : 'Estoque inicial'}</b>
+      ${p ? `<span style="font-size:12px">Saldo atual: ${saldos}</span>` : ''}
+    </div>
+    <div style="display:flex; gap:10px; align-items:flex-end; margin-top:8px; flex-wrap:wrap">
+      <div>
+        <div style="font-size:11px; color:var(--cinza); margin-bottom:3px">Quantidade</div>
+        <input id="fp-qtd" type="number" min="0" step="1" value="${qtd}" style="width:110px; font-size:16px; font-weight:700">
+      </div>
+      <div style="flex:1; min-width:160px">
+        <div style="font-size:11px; color:var(--cinza); margin-bottom:3px">Filial</div>
+        <select id="fp-fil">${FILIAIS.map(f => `<option value="${f.id}" ${f.id === filSel ? 'selected' : ''}>${f.nome} (${f.id})</option>`).join('')}</select>
+      </div>
+      ${p ? `<button type="button" class="btn-acao" onclick="fpSoLancar()">Só lançar entrada</button>` : ''}
+    </div>
+    <div style="font-size:11.5px; color:var(--cinza); margin-top:6px">
+      Deixe <b>0</b> para ${p ? 'apenas salvar o cadastro' : 'cadastrar sem estoque'}. A entrada vira movimentação, com histórico.
+    </div>
+  </div>`;
+}
+
+/** Entrada de estoque sem tocar no cadastro — quando só chegou mercadoria. */
+async function fpSoLancar() {
+  const p = FP.produto;
+  if (!p) return;
+  const qtd = Number($('#fp-qtd').value) || 0;
+  const filial = $('#fp-fil').value;
+  if (qtd <= 0) return toast('Informe uma quantidade maior que zero.');
+  try {
+    await apiFetch('/movimentacoes', {
+      method: 'POST',
+      body: { tipo: 'entrada', produtoId: p.id, filial, qtd, obs: 'Entrada pelo cadastro de produto' },
+    });
+    toast(`Entrada de <b>${qtd}</b> un em ${filial} registrada.`);
+    await fpRecarregar(p.id);
+  } catch (e) { toast(e.message); }
+}
+
+async function fpRecarregar(id) {
+  try {
+    PRODUTOS = await apiFetch('/produtos');
+    const atual = PRODUTOS.find(x => x.id === id);
+    if (atual) fpCarregar(atual);
+  } catch (e) {
+    // mantém a tela como está: o lançamento já foi gravado
+  }
+}
+
+/* ── NF-e ── */
+function fpPainelNfe() {
+  const n = FP.nota;
+  if (!n) {
+    return `<div style="border:1px solid var(--linha); border-radius:6px; padding:11px 12px">
+      <b style="font-size:11px; letter-spacing:.5px; text-transform:uppercase">Nota fiscal</b>
+      <div style="font-size:11.5px; color:var(--cinza); margin:5px 0 8px">Traga os produtos direto da NF-e do fornecedor, em vez de digitar um a um.</div>
+      <textarea id="fp-xml" rows="5" placeholder="Cole aqui o XML da NF-e" spellcheck="false"
+        style="width:100%; font-family:monospace; font-size:11px; padding:7px; border:1px solid var(--linha); border-radius:5px; background:#FAFBFD; resize:vertical"></textarea>
+      <button type="button" class="btn-acao primario" style="width:100%; margin-top:7px" id="btn-ler-nfe" onclick="fpLerNfe()">Ler NF-e</button>
+      <div style="font-size:11px; color:var(--cinza); margin-top:6px">O XML costuma vir por e-mail do fornecedor.</div>
+    </div>`;
+  }
+
+  const novos = n.novos || [];
+  const existentes = n.itens || [];
+  const linha = (i, ehNovo, idx) => `<div onclick="fpUsarItemNfe(${ehNovo ? 1 : 0}, ${idx})"
+      style="padding:6px 4px; border-bottom:1px solid var(--linha); cursor:pointer; display:flex; gap:8px; align-items:center">
+      <div style="flex:1; min-width:0">
+        <div style="font-weight:700; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${i.nome || i.descricao || ''}</div>
+        <div style="font-size:11px; color:var(--cinza)">${i.cod || i.codigo || ''} · ${i.quantidade ?? 0} ${i.unidade || ''} · R$ ${Number(i.valorUnitario || 0).toFixed(2)}</div>
+      </div>
+      <span style="font-size:10px; font-weight:800; padding:1px 6px; border-radius:99px; white-space:nowrap;
+        background:${ehNovo ? '#DCE6FA' : 'var(--verde-bg)'}; color:${ehNovo ? 'var(--azul)' : 'var(--verde)'}">${ehNovo ? 'novo' : 'existe'}</span>
+    </div>`;
+
+  return `<div style="border:1px solid var(--linha); border-radius:6px; padding:11px 12px">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px">
+      <b style="font-size:11px; letter-spacing:.5px; text-transform:uppercase">NF-e ${n.numero || ''}</b>
+      <button type="button" class="btn-acao" style="padding:2px 8px; font-size:11px" onclick="fpTrocarNota()">Trocar</button>
+    </div>
+    ${n.fornecedor ? `<div style="font-size:12.5px; font-weight:700; margin-top:3px">${n.fornecedor}</div>` : ''}
+    <div style="font-size:11px; color:var(--cinza); margin:2px 0 8px">
+      ${n.cnpj ? 'CNPJ ' + n.cnpj : ''}${n.emissao ? ' · ' + String(n.emissao).slice(0, 10).split('-').reverse().join('/') : ''}
+    </div>
+    <div style="font-size:11px; color:var(--cinza); font-weight:700; margin-bottom:4px">
+      ${existentes.length + novos.length} itens · ${novos.length} novo(s)
+    </div>
+    <div style="max-height:240px; overflow:auto">
+      ${existentes.map((i, k) => linha(i, false, k)).join('')}
+      ${novos.map((i, k) => linha(i, true, k)).join('')}
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-top:9px">
+      <span style="font-size:11px; color:var(--cinza)">Margem</span>
+      <input id="fp-margem" type="number" min="0" step="1" value="40" style="width:64px; padding:4px 6px">
+      <span style="font-size:11px; color:var(--cinza)">%</span>
+      <button type="button" class="btn-acao primario" style="flex:1" id="btn-nota-toda" onclick="fpLancarNotaToda()">Lançar nota inteira</button>
+    </div>
+    <div style="font-size:11px; color:var(--cinza); margin-top:6px">
+      Clique num item para carregá-lo no formulário. "Lançar nota inteira" cria os novos com preço = custo + margem e dá entrada em todos.
+    </div>
+  </div>`;
+}
+
+function fpTrocarNota() { FP.nota = null; fpRender(); }
+
+async function fpLerNfe() {
+  const xml = $('#fp-xml').value.trim();
+  if (!xml) return toast('Cole o XML da NF-e primeiro.');
+  const btn = $('#btn-ler-nfe');
+  btn.disabled = true; btn.textContent = 'Lendo…';
+  try {
+    const nota = await apiFetch('/nfe/validar', { method: 'POST', body: { xmlNfe: xml } });
+    nota.xml = xml;
+    FP.nota = nota;
+    fpRender();
+    toast(`NF-e lida: <b>${(nota.itens?.length || 0) + (nota.novos?.length || 0)}</b> item(ns).`);
+  } catch (e) {
+    toast(e.message);
+    btn.disabled = false; btn.textContent = 'Ler NF-e';
+  }
+}
+
+function fpUsarItemNfe(ehNovo, idx) {
+  const i = ehNovo ? FP.nota.novos[idx] : FP.nota.itens[idx];
+  const custo = Number(i.valorUnitario || 0);
+  const margem = Number($('#fp-margem')?.value ?? 40) / 100;
+
+  if (!ehNovo) {
+    const p = PRODUTOS.find(x => x.id === i.produtoId);
+    if (p) fpCarregar(p);
+    // o que muda numa compra é o custo; o preço de venda continua sendo seu
+    if (custo) $('#fp-custo').value = custo;
+  } else {
+    FP.produto = null;
+    $('#fp-cod').value = i.codigo || '';
+    $('#fp-nome').value = i.descricao || '';
+    $('#fp-un').value = i.unidade || 'UN';
+    $('#fp-grupo').value = '';
+    $('#fp-min').value = 0;
+    $('#fp-custo').value = custo || '';
+    $('#fp-preco').value = custo ? (custo * (1 + margem)).toFixed(2) : '';
+    $('#fp-precoMin').value = custo ? (custo * 1.05).toFixed(2) : '';
+    fpRender();
+  }
+  const q = $('#fp-qtd');
+  if (q) q.value = i.quantidade || 0;
+  fpSugestoes([]);
+}
+
+/** Cria os produtos que faltam e usa o /nfe/entrada para dar entrada em todos. */
+async function fpLancarNotaToda() {
+  const n = FP.nota;
+  if (!n) return;
+  const filial = $('#fp-fil')?.value || FILIAIS[0]?.id;
+  if (!filial) return toast('Cadastre uma filial antes de lançar a nota.');
+  const margem = Number($('#fp-margem').value ?? 40) / 100;
+  const novos = n.novos || [];
+
+  const semValor = novos.find(i => !Number(i.valorUnitario));
+  if (semValor) return toast(`O item ${semValor.codigo} veio sem valor na nota — cadastre-o manualmente antes.`);
+
+  const btn = $('#btn-nota-toda');
+  btn.disabled = true; btn.textContent = 'Lançando…';
+  try {
+    for (const i of novos) {
+      const custo = Number(i.valorUnitario);
+      await apiFetch('/produtos', {
+        method: 'POST',
+        body: {
+          cod: i.codigo, nome: i.descricao, un: i.unidade || 'UN', grupo: '',
+          min: 0, custo, preco: +(custo * (1 + margem)).toFixed(2), precoMin: +(custo * 1.05).toFixed(2),
+        },
+      });
+    }
+    const r = await apiFetch('/nfe/entrada', { method: 'POST', body: { xmlNfe: n.xml, filial } });
+    toast(`Nota lançada: <b>${novos.length}</b> produto(s) criado(s), <b>${r.itens?.length || 0}</b> com entrada em ${filial}.`);
+    PRODUTOS = await apiFetch('/produtos');
+    FP.nota = null; FP.produto = null;
+    fpLimparCampos(true);
+    fpRender();
+    $('#fp-cod').focus();
+  } catch (e) {
+    toast(e.message);
+    btn.disabled = false; btn.textContent = 'Lançar nota inteira';
+  }
 }
 
 async function salvarProduto(e, id) {
@@ -471,20 +790,49 @@ async function salvarProduto(e, id) {
     precoMin: Number($('#fp-precoMin').value || preco),
   };
 
+  const qtd = Number($('#fp-qtd')?.value) || 0;
+  const filial = $('#fp-fil')?.value;
+
   const btn = $('#btn-salvar-prod');
   btn.disabled = true; btn.textContent = 'Gravando…';
   try {
-    if (id) {
-      await apiFetch(`/produtos/${id}`, { method: 'PUT', body });
-      toast('Produto atualizado com sucesso.');
+    // 1) cadastro
+    let produtoId = FP.produto?.id;
+    if (produtoId) {
+      await apiFetch(`/produtos/${produtoId}`, { method: 'PUT', body });
     } else {
-      await apiFetch('/produtos', { method: 'POST', body });
-      toast('Produto criado com sucesso.');
+      const criado = await apiFetch('/produtos', { method: 'POST', body });
+      produtoId = criado?.id;
     }
-    janelaProdutos();
+
+    // 2) estoque, se foi informada quantidade — falha aqui não desfaz o cadastro,
+    //    então o aviso precisa deixar claro o que gravou e o que não gravou
+    if (qtd > 0 && produtoId && filial) {
+      try {
+        await apiFetch('/movimentacoes', {
+          method: 'POST',
+          body: { tipo: 'entrada', produtoId, filial, qtd, obs: 'Entrada pelo cadastro de produto' },
+        });
+        toast(`<b>${nome}</b> gravado e <b>${qtd}</b> un lançadas em ${filial}.`);
+      } catch (err) {
+        toast(`Produto gravado, mas a entrada de estoque falhou: ${err.message}`);
+      }
+    } else {
+      toast(`<b>${nome}</b> gravado.`);
+    }
+
+    // 3) segue para o próximo, sem fechar a janela
+    PRODUTOS = await apiFetch('/produtos');
+    FP.produto = null;
+    fpLimparCampos(true);
+    fpGrupos();
+    fpRender();
+    $('#fp-cod').focus();
   } catch (err) {
     toast(err.message);
-    btn.disabled = false; btn.textContent = 'Gravar';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = FP.produto ? 'Salvar e lançar' : 'Gravar e continuar';
   }
 }
 
@@ -1811,6 +2159,7 @@ Object.assign(window, {
   buscarProdutos, renderGridProd, mostraSaldoAj,
   gravarES, gravarTransf, gravarAjuste, importarNfe,
   abrirNovoProduto, abrirEditarProduto, salvarProduto,
+  fpEscolher, fpSoLancar, fpLerNfe, fpUsarItemNfe, fpLancarNotaToda, fpTrocarNota,
   abrirCaixa, escanearPeloCelular,
   // Clientes
   janelaClientes, buscarClientes, novoCliente, editarCliente, salvarCliente, buscarCep,
