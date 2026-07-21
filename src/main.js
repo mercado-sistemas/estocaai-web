@@ -429,7 +429,14 @@ function _formProduto(p) {
   const titulo = p ? `Alterar Produto — ${p.cod}` : 'Incluir Produto';
   abrirJanela(titulo, `
     <form onsubmit="salvarProduto(event,'${p?.id || ''}')">
-      <div class="form-linha"><label>Código *</label><input id="fp-cod" value="${p?.cod || ''}" required></div>
+      <div class="form-linha">
+        <label>Código *</label>
+        <div style="display:flex; gap:6px">
+          <input id="fp-cod" value="${p?.cod || ''}" required style="flex:1">
+          <button class="btn-acao primario" type="button" onclick="escanearPeloCelular()"
+                  title="Escanear o código do produto pelo celular">📷 Escanear</button>
+        </div>
+      </div>
       <div class="form-linha"><label>Descrição *</label><input id="fp-nome" value="${p?.nome || ''}" required></div>
       <div class="form-linha"><label>UN</label><input id="fp-un" value="${p?.un || 'UN'}"></div>
       <div class="form-linha"><label>Grupo</label><input id="fp-grupo" value="${p?.grupo || ''}"></div>
@@ -1732,7 +1739,25 @@ const FERRAMENTAS = [
   { ico: '📊', atalho: 'F5', rot: 'Rel.Estoque', ac: janelaRelEstoque },
   { ico: '⚠️', atalho: 'F4', rot: 'Reposição', ac: janelaReposicao },
   { ico: '📋', atalho: 'F3', rot: 'Histórico', ac: janelaHistorico },
+  { ico: '🧾', atalho: 'F8', rot: 'Caixa', ac: abrirCaixa },
 ];
+
+// ─── Caixa (PDV) ──────────────────────────────────────────────────────────────
+// Abre o caixa já autenticado com a sessão atual do estoque: o token é o mesmo
+// JWT, emitido pela estocaai-api, que a caixa-api também valida. Vai no hash da
+// URL para não aparecer em log de servidor nem no header Referer.
+function abrirCaixa() {
+  if (!_token) return toast('Faça login para abrir o caixa.');
+  const base = import.meta.env.VITE_CAIXA_URL;
+  if (!base) return toast('URL do caixa não configurada (VITE_CAIXA_URL).');
+  window.open(`${base}/#sso=${encodeURIComponent(_token)}`, '_blank', 'noopener');
+}
+
+// ─── Escanear pelo celular ────────────────────────────────────────────────────
+// Botão reservado: a leitura pelo celular ainda não foi implementada.
+function escanearPeloCelular() {
+  toast('Leitura pelo celular ainda não disponível.');
+}
 
 function montarToolbar() {
   $('#toolbar').innerHTML = '';
@@ -1752,6 +1777,7 @@ document.addEventListener('keydown', e => {
     'CTRL+F6': janelaEntradaNF, 'CTRL+T': () => janelaTransferencia(),
     'F6': janelaPrecificar,
     'F4': janelaReposicao, 'F5': janelaRelEstoque, 'F3': janelaHistorico,
+    'F8': abrirCaixa,
   };
   const fn = mapa[combo];
   if (fn) { e.preventDefault(); fn(); }
@@ -1785,6 +1811,7 @@ Object.assign(window, {
   buscarProdutos, renderGridProd, mostraSaldoAj,
   gravarES, gravarTransf, gravarAjuste, importarNfe,
   abrirNovoProduto, abrirEditarProduto, salvarProduto,
+  abrirCaixa, escanearPeloCelular,
   // Clientes
   janelaClientes, buscarClientes, novoCliente, editarCliente, salvarCliente, buscarCep,
   // Vendedores
