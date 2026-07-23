@@ -2,6 +2,7 @@ import { abrirModalProduto, fecharModalProduto } from './produto/montar.jsx';
 import { abrirModalCliente } from './cliente/montar.jsx';
 import { abrirModalVendedor } from './vendedor/montar.jsx';
 import { abrirModalHistorico } from './historico/montar.jsx';
+import { abrirReposicaoReact, abrirRelEstoqueReact, fecharModalRelatorio } from './relatorios/montar.jsx';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const BFF = import.meta.env.VITE_BFF_URL;
@@ -73,7 +74,7 @@ function abrirJanela(titulo, html, larg) {
     <div class="janela-corpo">${html}</div>`;
   $('#mesa').appendChild(j);
 }
-function fecharJanela() { $('#janela-ativa')?.remove(); fecharModalProduto(); }
+function fecharJanela() { $('#janela-ativa')?.remove(); fecharModalProduto(); fecharModalRelatorio(); }
 
 // ─── Login — abas ─────────────────────────────────────────────────────────────
 let _modoLogin = 'func'; // 'func' | 'chefe'
@@ -644,33 +645,14 @@ async function gravarAjuste() {
 }
 
 // ─── Ponto de Reposição ───────────────────────────────────────────────────────
-async function janelaReposicao() {
-  abrirJanela('Ponto de Reposição — Itens Abaixo do Mínimo', `
-    <div class="moldura-grid" style="max-height:340px"><table class="tabela">
-      <thead><tr>
-        <th>Código</th><th>Descrição</th><th>Filial</th>
-        <th class="num">Saldo</th><th class="num">Mínimo</th><th class="num">Repor</th>
-      </tr></thead>
-      <tbody><tr><td colspan="6" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
-    </table></div>
-    <div class="rodape-form">
-      <button class="btn-acao" onclick="toast('No sistema final: gera Pedido de Compra agrupado por fornecedor')">Gerar Pedido de Compra</button>
-      <button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button>
-    </div>`, 860);
-  try {
-    const rep = await apiFetch('/movimentacoes/reposicao');
-    const tb = document.querySelector('#janela-ativa .tabela tbody');
-    if (!tb) return;
-    tb.innerHTML = rep.map(r => `
-      <tr onclick="prodSel='${r.produtoId || ''}'; janelaProdutos()">
-        <td class="num">${r.cod}</td><td>${r.nome}</td>
-        <td>${nomeFil(r.filial) || r.filial}</td>
-        <td class="num neg">${r.saldo}</td>
-        <td class="num">${r.min}</td>
-        <td class="num" style="font-weight:900; color:var(--vermelho)">+${r.repor ?? (r.min - r.saldo)}</td>
-      </tr>`).join('') ||
-      '<tr><td colspan="6" style="text-align:center;color:var(--verde);padding:18px;font-weight:700">Nenhum item abaixo do mínimo ✓</td></tr>';
-  } catch (e) { toast(e.message); }
+// Reposição migrada para React (src/relatorios/): exibe nome de produto, antes
+// via innerHTML. O main.js segue dono do estado; clicar abre o produto.
+function janelaReposicao() {
+  fecharJanela();
+  abrirReposicaoReact({
+    apiFetch, toast, nomeFil,
+    onAbrirProduto(id) { prodSel = id || null; janelaProdutos(); },
+  });
 }
 
 // ─── Entrada por NF-e ─────────────────────────────────────────────────────────
@@ -1189,28 +1171,14 @@ document.addEventListener('input', e => {
 });
 
 // ─── Relatórios ───────────────────────────────────────────────────────────────
-async function janelaRelEstoque() {
-  abrirJanela('Estoque Atual por Filial', `
-    <div class="moldura-grid" style="max-height:380px"><table class="tabela">
-      <thead><tr>
-        <th>Código</th><th>Descrição</th>
-        ${FILIAIS.map(f => `<th class="num">${f.nome}</th>`).join('')}
-        <th class="num">Total</th>
-      </tr></thead>
-      <tbody><tr><td colspan="${3 + FILIAIS.length}" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
-    </table></div>
-    <div class="rodape-form"><button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button></div>`, 900);
-  try {
-    const prods = await apiFetch('/produtos');
-    const tb = document.querySelector('#janela-ativa .tabela tbody');
-    if (!tb) return;
-    tb.innerHTML = prods.map(p => `
-      <tr onclick="prodSel='${p.id}'; fecharJanela(); janelaProdutos()">
-        <td class="num">${p.cod}</td><td>${p.nome}</td>
-        ${FILIAIS.map(f => `<td class="num ${((p.saldo ?? {})[f.id] || 0) < (p.min || 0) ? 'neg' : ''}">${(p.saldo ?? {})[f.id] || 0}</td>`).join('')}
-        <td class="num" style="font-weight:900">${saldoTotal(p)}</td>
-      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Nenhum produto.</td></tr>';
-  } catch (e) { toast(e.message); }
+// Estoque por Filial migrado para React (src/relatorios/): exibe nome de
+// produto, antes via innerHTML. O main.js segue dono do estado.
+function janelaRelEstoque() {
+  fecharJanela();
+  abrirRelEstoqueReact({
+    apiFetch, toast, filiais: FILIAIS, saldoTotal,
+    onAbrirProduto(id) { prodSel = id; janelaProdutos(); },
+  });
 }
 
 // ─── Movimentações de Estoque (tela em React: src/historico/) ────────────────
