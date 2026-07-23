@@ -244,7 +244,7 @@ export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
       </div>
 
       <div className="janela-corpo">
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 14, alignItems: 'start' }}>
+        <div className="grid-form-nfe">
           {/* ── formulário ── */}
           <form onSubmit={gravar}>
             <div className="form-linha">

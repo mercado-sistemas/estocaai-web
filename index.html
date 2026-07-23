@@ -160,6 +160,16 @@ kbd{font-family:inherit; font-weight:800; font-size:11px; color:var(--cinza)}
 }
 .form-linha input:focus,.form-linha select:focus{outline:2px solid var(--amarelo); border-color:var(--amarelo-2)}
 @media(max-width:600px){.form-linha{grid-template-columns:1fr; gap:3px}}
+
+/* Grid "formulário + NF-e" do Incluir Produto: empilha em telas estreitas */
+.grid-form-nfe{display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:14px; align-items:start}
+@media(max-width:760px){
+  .grid-form-nfe{grid-template-columns:1fr}
+  /* fonte 16px no foco evita o zoom automático do iOS nos campos */
+  .form-linha input,.form-linha select,.janela-corpo textarea{font-size:16px}
+  .janela{max-height:calc(100dvh - 84px)}
+  .grade-botoes{grid-template-columns:1fr 1fr}
+}
 .rodape-form{display:flex; gap:8px; justify-content:flex-end; margin-top:14px}
 .rodape-form .btn-acao{min-width:130px}
 
