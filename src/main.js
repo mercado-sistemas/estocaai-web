@@ -1,5 +1,6 @@
 import { abrirModalProduto, fecharModalProduto } from './produto/montar.jsx';
 import { abrirModalCliente } from './cliente/montar.jsx';
+import { abrirModalVendedor } from './vendedor/montar.jsx';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const BFF = import.meta.env.VITE_BFF_URL;
@@ -1366,100 +1367,14 @@ function janelaClientes() {
 }
 
 
-// ─── Cadastro de Vendedores / Funcionários ────────────────────────────────────
-// ─── Funcionários ─────────────────────────────────────────────────────────────
-async function janelaVendedores() {
-  abrirJanela('Funcionários', `
-    <div class="linha-consulta" style="margin-bottom:10px">
-      <input type="text" id="vend-busca" placeholder="Username…" autocomplete="off">
-      <button class="btn-acao" onclick="buscarVendedores()">Buscar</button>
-    </div>
-    <div class="moldura-grid" style="max-height:260px"><table class="tabela" id="grid-vend">
-      <thead><tr><th>Username</th><th>Perfil</th><th>Filiais</th><th>Situação</th></tr></thead>
-      <tbody><tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
-    </table></div>
-    <div class="grade-botoes" style="margin-top:10px">
-      <button class="btn-acao" onclick="novoVendedor()">Incluir</button>
-      <button class="btn-acao" onclick="editarVendedor()">Alterar</button>
-    </div>
-    <div class="rodape-form"><button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button></div>`, 820);
-  buscarVendedores();
-  setTimeout(() => $('#vend-busca')?.focus(), 60);
+// ─── Funcionários (tela em React: src/vendedor/) ─────────────────────────────
+/* Migrada pela segurança: o nome do funcionário é digitado e antes ia para
+   innerHTML. O main.js só monta o componente e passa a API e as filiais. */
+function janelaVendedores() {
+  fecharJanela();
+  abrirModalVendedor({ apiFetch, toast, filiais: FILIAIS });
 }
 
-let _vendSel = null;
-let _vendedores = [];
-async function buscarVendedores() {
-  const tb = document.querySelector('#grid-vend tbody');
-  if (!tb) return;
-  tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr>';
-  try {
-    _vendedores = await apiFetch('/funcionarios');
-    if (_vendedores.length > 0) _vendSel = _vendedores[0].id;
-    tb.innerHTML = _vendedores.map(v => `
-      <tr class="${v.id === _vendSel ? 'sel' : ''}" onclick="_vendSel='${v.id}'; document.querySelectorAll('#grid-vend tbody tr').forEach(r=>r.classList.remove('sel')); this.classList.add('sel')">
-        <td>${v.nome}</td>
-        <td>${v.role === 'GESTAO' ? 'Gestão' : 'Caixa'}</td>
-        <td>${(v.lojas || []).join(', ') || '—'}</td>
-        <td><b style="color:${v.ativo !== false ? 'var(--verde)' : 'var(--vermelho)'}">${v.ativo !== false ? 'Ativo' : 'Inativo'}</b></td>
-      </tr>`).join('') ||
-      '<tr><td colspan="4" style="text-align:center;color:var(--cinza);padding:18px">Nenhum funcionário encontrado.</td></tr>';
-  } catch (e) {
-    tb.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--vermelho);padding:18px">${e.message}</td></tr>`;
-  }
-}
-function novoVendedor() { _formVendedor(null); }
-function editarVendedor() {
-  const v = _vendedores.find(x => x.id === _vendSel);
-  if (!v) return toast('Selecione um funcionário para alterar.');
-  _formVendedor(v);
-}
-function _formVendedor(v) {
-  const lojasCheck = FILIAIS.map(f => {
-    const marcado = v?.lojas?.includes(f.id) ? 'checked' : '';
-    return `<label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0">
-      <input type="checkbox" name="loja" value="${f.id}" ${marcado}> ${f.nome}
-    </label>`;
-  }).join('');
-
-  abrirJanela(v ? `Alterar Funcionário — ${v.nome}` : 'Incluir Funcionário', `
-    <form onsubmit="salvarVendedor(event,'${v?.id || ''}')">
-      <div class="form-linha"><label>Nome *</label><input id="fv-login" value="${v?.nome || ''}" required autocomplete="off"></div>
-      <div class="form-linha"><label>${v ? 'Nova Senha' : 'Senha *'}</label>
-        <input id="fv-senha" type="password" autocomplete="new-password" ${!v ? 'required minlength="6"' : 'minlength="6"'}
-          placeholder="${v ? 'deixe em branco para manter' : 'mínimo 6 caracteres'}"></div>
-      <div class="form-linha"><label>Perfil</label>
-        <select id="fv-perfil">
-          <option value="caixa" ${v?.role==='CAIXA'?'selected':''}>Caixa</option>
-          <option value="gestao" ${v?.role==='GESTAO'?'selected':''}>Gestão</option>
-        </select>
-      </div>
-      ${FILIAIS.length > 0 ? `<div class="form-linha" style="align-items:flex-start">
-        <label style="padding-top:4px">Filiais</label>
-        <div style="display:flex;flex-wrap:wrap;gap:8px 16px;padding:6px 0">${lojasCheck}</div>
-      </div>` : ''}
-      <div class="rodape-form">
-        <button class="btn-acao" type="button" onclick="janelaVendedores()">Voltar</button>
-        <button class="btn-acao primario" type="submit" id="btn-fv">Gravar</button>
-      </div>
-    </form>`, 620);
-}
-async function salvarVendedor(e, id) {
-  e.preventDefault();
-  const nome = $('#fv-login').value.trim();
-  const senha = $('#fv-senha').value;
-  if (!nome) return toast('Nome é obrigatório.');
-  if (!id && !senha) return toast('Senha é obrigatória para novo funcionário.');
-  const lojas = [...document.querySelectorAll('input[name="loja"]:checked')].map(c => c.value);
-  const body = { nome, role: $('#fv-perfil').value, lojas };
-  if (senha) body.senha = senha;
-  const btn = $('#btn-fv'); btn.disabled = true; btn.textContent = 'Gravando…';
-  try {
-    if (id) { await apiFetch(`/funcionarios/${id}`, { method: 'PUT', body }); toast('Funcionário atualizado.'); }
-    else { await apiFetch('/funcionarios', { method: 'POST', body }); toast('Funcionário criado.'); }
-    janelaVendedores();
-  } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Gravar'; }
-}
 
 // ─── Menus ────────────────────────────────────────────────────────────────────
 const MENUS = [
@@ -1636,6 +1551,6 @@ Object.assign(window, {
   // Clientes
   janelaClientes,
   // Vendedores
-  janelaVendedores, buscarVendedores, novoVendedor, editarVendedor, salvarVendedor,
+  janelaVendedores,
   nomeFil,
 });
