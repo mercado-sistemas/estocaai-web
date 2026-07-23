@@ -103,6 +103,14 @@ export default function ClienteModal({ ctx, onClose }) {
     e.preventDefault();
     const nome = form.nome.trim();
     if (nome.length < 2) return toast('Nome deve ter ao menos 2 caracteres.');
+    // celular é opcional; se informado, precisa ser um telefone válido (DDD + número)
+    const cel = form.celular.trim();
+    if (cel) {
+      const d = cel.replace(/\D/g, '');
+      if (d.length < 10 || d.length > 11 || cel.length > 20) {
+        return toast('Celular inválido: informe DDD + número (10 ou 11 dígitos).');
+      }
+    }
     const body = {
       nome,
       fantasia: form.fantasia.trim(),

@@ -41,6 +41,8 @@ let _searchTimer = null;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const $ = s => document.querySelector(s);
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Telefone com DDD: 10 dígitos (fixo) ou 11 (celular). Aceita máscara.
+const telefoneValido = v => { const d = String(v || '').replace(/\D/g, ''); return d.length >= 10 && d.length <= 11 && String(v).length <= 20; };
 const nomeFil = id => id === 'todas' ? 'Todas' : (FILIAIS.find(f => f.id === id)?.nome || id);
 const saldoTotal = p => FILIAIS.reduce((s, f) => s + ((p.saldo ?? {})[f.id] || 0), 0);
 const saldoVisto = p => filialAtual === 'todas' ? saldoTotal(p) : ((p.saldo ?? {})[filialAtual] || 0);
@@ -172,6 +174,7 @@ async function registrarGestor() {
   if (senha.length < 6)  return toast('Senha deve ter ao menos 6 caracteres.');
   if (senha !== senhaConf) return toast('As senhas não conferem.');
   if (!telefone)        return toast('Informe o telefone.');
+  if (!telefoneValido(telefone)) return toast('Telefone inválido: informe DDD + número (10 ou 11 dígitos).');
   if (!cep)             return toast('Informe o CEP.');
   if (!rua)             return toast('Informe a rua.');
   if (!numero)          return toast('Informe o número.');
