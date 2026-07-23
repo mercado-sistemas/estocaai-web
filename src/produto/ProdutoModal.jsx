@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ScannerCamera from '../scanner/ScannerCamera.jsx';
 
 /*
  * Janela Incluir/Alterar Produto — versão React.
@@ -16,12 +17,13 @@ const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigit
 const VAZIO = { cod: '', nome: '', un: 'UN', grupo: '', min: 0, custo: '', preco: '', precoMin: '' };
 
 export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
-  const { apiFetch, toast, filiais, filialAtual, escanear } = ctx;
+  const { apiFetch, toast, filiais, filialAtual } = ctx;
 
   const [form, setForm] = useState(VAZIO);
   const [produto, setProduto] = useState(produtoInicial || null); // produto existente carregado
   const [sugestoes, setSugestoes] = useState([]);
   const [nota, setNota] = useState(null);
+  const [scannerAberto, setScannerAberto] = useState(false);
   const [xml, setXml] = useState('');
   const [qtd, setQtd] = useState(0);
   const [filial, setFilial] = useState(filialAtual !== 'todas' ? filialAtual : (filiais[0]?.id || ''));
@@ -67,21 +69,32 @@ export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
     codRef.current?.focus();
   }
 
+  async function procurar(q) {
+    try {
+      const achados = await apiFetch(`/produtos?busca=${encodeURIComponent(q.trim())}`);
+      const exato = achados.find((x) => (x.cod || '').toLowerCase() === q.trim().toLowerCase());
+      if (exato) { carregar(exato); return; }
+      if (produto) setProduto(null);
+      setSugestoes(achados.slice(0, 6));
+    } catch { /* busca é auxiliar: falha não trava a digitação */ }
+  }
+
   function onCodInput(e) {
     const q = e.target.value;
     setForm((f) => ({ ...f, cod: q }));
     clearTimeout(buscaTimer.current);
     if (!q.trim()) { setProduto(null); setSugestoes([]); return; }
+    buscaTimer.current = setTimeout(() => procurar(q), 250);
+  }
 
-    buscaTimer.current = setTimeout(async () => {
-      try {
-        const achados = await apiFetch(`/produtos?busca=${encodeURIComponent(q.trim())}`);
-        const exato = achados.find((x) => (x.cod || '').toLowerCase() === q.trim().toLowerCase());
-        if (exato) { carregar(exato); return; }
-        if (produto) setProduto(null);
-        setSugestoes(achados.slice(0, 6));
-      } catch { /* busca é auxiliar: falha não trava a digitação */ }
-    }, 250);
+  // código lido pela câmera: preenche o campo e busca na hora (sem debounce)
+  function onScan(codigo) {
+    setScannerAberto(false);
+    const cod = String(codigo).trim();
+    setForm((f) => ({ ...f, cod }));
+    clearTimeout(buscaTimer.current);
+    if (cod) procurar(cod);
+    toast(`Código lido: <b>${cod}</b>`);
   }
 
   function onCodKey(e) {
@@ -221,6 +234,8 @@ export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
   const dataEmissao = nota?.emissao ? String(nota.emissao).slice(0, 10).split('-').reverse().join('/') : '';
 
   return (
+   <>
+    {scannerAberto && <ScannerCamera onDetected={onScan} onClose={() => setScannerAberto(false)} />}
     <div className="janela" style={{ maxWidth: 940 }}>
       <div className="janela-cab">
         <div className="dobra" />
@@ -238,8 +253,8 @@ export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input ref={codRef} value={form.cod} onChange={onCodInput} onKeyDown={onCodKey}
                     placeholder="Bipe, digite o código ou o nome…" autoComplete="off" required style={{ flex: 1 }} />
-                  <button className="btn-acao primario" type="button" title="Escanear o código do produto pelo celular"
-                    onClick={() => escanear()}>📷</button>
+                  <button className="btn-acao primario" type="button" title="Escanear o código de barras pela câmera"
+                    onClick={() => setScannerAberto(true)}>📷</button>
                 </div>
                 {sugestoes.length > 0 && (
                   <div style={{ position: 'absolute', zIndex: 9, width: '100%', background: '#fff', border: '1px solid var(--linha)', borderRadius: 6, boxShadow: '0 8px 20px rgba(20,33,61,.18)', overflow: 'hidden' }}>
@@ -370,6 +385,7 @@ export default function ProdutoModal({ ctx, produtoInicial, onClose }) {
         </div>
       </div>
     </div>
+   </>
   );
 }
 
