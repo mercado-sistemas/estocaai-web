@@ -1,6 +1,7 @@
 import { abrirModalProduto, fecharModalProduto } from './produto/montar.jsx';
 import { abrirModalCliente } from './cliente/montar.jsx';
 import { abrirModalVendedor } from './vendedor/montar.jsx';
+import { abrirModalHistorico } from './historico/montar.jsx';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const BFF = import.meta.env.VITE_BFF_URL;
@@ -1212,31 +1213,15 @@ async function janelaRelEstoque() {
   } catch (e) { toast(e.message); }
 }
 
-async function janelaHistorico() {
-  abrirJanela('Movimentações de Estoque', `
-    <div class="moldura-grid" style="max-height:380px"><table class="tabela">
-      <thead><tr><th>Tipo</th><th>Produto</th><th>Filial</th><th class="num">Qtd</th><th>Obs</th><th>Quando</th></tr></thead>
-      <tbody><tr><td colspan="6" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
-    </table></div>
-    <div class="rodape-form"><button class="btn-acao primario" onclick="fecharJanela()">(ESC) Fechar</button></div>`, 900);
-  try {
-    const params = filialAtual !== 'todas' ? `?filial=${filialAtual}` : '';
-    const movs = await apiFetch(`/movimentacoes${params}`);
-    const tb = document.querySelector('#janela-ativa .tabela tbody');
-    if (!tb) return;
-    tb.innerHTML = movs.map(m => {
-      const p = PRODUTOS.find(x => x.id === m.produtoId);
-      return `<tr>
-        <td><b>${(m.tipo || '').toUpperCase()}</b></td>
-        <td>${p ? `${p.cod} — ${p.nome}` : (m.produtoId || '—')}</td>
-        <td>${nomeFil(m.filial)}${m.destino ? ' → ' + nomeFil(m.destino) : ''}</td>
-        <td class="num">${m.qtd}</td>
-        <td>${m.obs || ''}</td>
-        <td style="font-size:11px">${m.em ? new Date(m.em).toLocaleString('pt-BR') : '—'}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--cinza);padding:18px">Sem movimentações.</td></tr>';
-  } catch (e) { toast(e.message); }
+// ─── Movimentações de Estoque (tela em React: src/historico/) ────────────────
+/* Migrada pela segurança: a observação e o nome do produto são digitados e
+   antes iam para innerHTML. O main.js monta o componente e passa a API e o
+   contexto (produtos, filial atual, nomeFil). */
+function janelaHistorico() {
+  fecharJanela();
+  abrirModalHistorico({ apiFetch, toast, produtos: PRODUTOS, filialAtual, nomeFil });
 }
+
 
 async function janelaFiliais() {
   abrirJanela('Filiais', `
