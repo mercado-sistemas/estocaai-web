@@ -1332,9 +1332,20 @@ const FERRAMENTAS = [
 // URL para não aparecer em log de servidor nem no header Referer.
 function abrirCaixa() {
   if (!_token) return toast('Faça login para abrir o caixa.');
-  const base = import.meta.env.VITE_CAIXA_URL;
+  const base = urlDoCaixa();
   if (!base) return toast('URL do caixa não configurada (VITE_CAIXA_URL).');
   window.open(`${base}/#sso=${encodeURIComponent(_token)}`, '_blank', 'noopener');
+}
+
+// Prioriza a variável de ambiente; se faltar (ex.: não configurada no Vercel),
+// deriva do próprio hostname trocando "estocaai" por "caixa" — em produção o
+// estoque é estocaai.lass.lat e o caixa é caixa.lass.lat.
+function urlDoCaixa() {
+  const env = import.meta.env.VITE_CAIXA_URL;
+  if (env) return env;
+  const { origin } = window.location;
+  if (origin.includes('estocaai')) return origin.replace('estocaai', 'caixa');
+  return null; // local sem .env: não há como adivinhar a porta
 }
 
 // ─── Escanear pelo celular ────────────────────────────────────────────────────
