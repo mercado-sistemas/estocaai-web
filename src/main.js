@@ -1335,6 +1335,13 @@ const FERRAMENTAS = [
 // URL para não aparecer em log de servidor nem no header Referer.
 function abrirCaixa() {
   if (!_token) return toast('Faça login para abrir o caixa.');
+  // O caixa precisa de ao menos uma filial para abrir pré-venda. Sem filial,
+  // manda cadastrar antes — senão o caixa abriria e falharia ao criar a venda.
+  if (!FILIAIS || FILIAIS.length === 0) {
+    toast('Cadastre uma filial antes de abrir o caixa.');
+    janelaFiliais();
+    return;
+  }
   const base = urlDoCaixa();
   if (!base) return toast('URL do caixa não configurada (VITE_CAIXA_URL).');
   window.open(`${base}/#sso=${encodeURIComponent(_token)}`, '_blank', 'noopener');
