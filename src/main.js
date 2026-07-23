@@ -1,4 +1,4 @@
-import { abrirModalProduto, fecharModalProduto } from './produto/montar.jsx';
+import { abrirModalProduto, fecharModalProduto, abrirProdutosHub, fecharProdutosHub } from './produto/montar.jsx';
 import { abrirModalCliente } from './cliente/montar.jsx';
 import { abrirModalVendedor } from './vendedor/montar.jsx';
 import { abrirModalHistorico } from './historico/montar.jsx';
@@ -74,7 +74,7 @@ function abrirJanela(titulo, html, larg) {
     <div class="janela-corpo">${html}</div>`;
   $('#mesa').appendChild(j);
 }
-function fecharJanela() { $('#janela-ativa')?.remove(); fecharModalProduto(); fecharModalRelatorio(); }
+function fecharJanela() { $('#janela-ativa')?.remove(); fecharModalProduto(); fecharModalRelatorio(); fecharProdutosHub(); }
 
 // ─── Login — abas ─────────────────────────────────────────────────────────────
 let _modoLogin = 'func'; // 'func' | 'chefe'
@@ -293,134 +293,29 @@ const optsFil = sel => FILIAIS.map(f =>
 ).join('');
 
 // ─── F7 Produtos ──────────────────────────────────────────────────────────────
+// ─── F7 Produtos — hub em React (src/produto/ProdutosHub.jsx) ────────────────
+/* Migrado pela segurança: a grade e o detalhe exibem nome de produto, antes via
+   innerHTML. Os botões de ação seguem sendo as funções vanilla (ctx.acoes); o
+   componente espelha PRODUTOS e prodSel de volta pelo onSync para elas lerem o
+   estado atual. */
 function janelaProdutos() {
-  abrirJanela('Produtos', `
-    <div class="moldura-grid"><table class="tabela" id="grid-prod">
-      <thead><tr>
-        <th>Código</th><th>Cód. Fábrica</th><th>Descrição do Produto</th>
-        <th class="num">Quantia</th><th class="num">Preço Venda</th>
-      </tr></thead>
-      <tbody><tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr></tbody>
-    </table></div>
-
-    <div class="painel-det" id="det-prod"></div>
-
-    <div class="grade-botoes">
-      <button class="btn-acao" onclick="abrirNovoProduto()">Incluir</button>
-      <button class="btn-acao" onclick="abrirEditarProduto()">Alterar</button>
-      <button class="btn-acao" onclick="stub('Ativar/Desativar')">Ativar/Desativar</button>
-      <button class="btn-acao" onclick="detalhesEstoque()"><kbd>7</kbd>-Detalhes de Estoque</button>
-      <button class="btn-acao" onclick="produtoSimilar()"><kbd>9</kbd>-Produto Similar</button>
-      <button class="btn-acao" onclick="totaliza()">Totaliza</button>
-      <button class="btn-acao" onclick="analisaProduto()">Analisa Produto</button>
-      <button class="btn-acao" onclick="janelaPrecificar()"><kbd>L</kbd>-Formação do Preço de Venda</button>
-      <button class="btn-acao" onclick="stub('Duplicar Produto')"><kbd>M</kbd>-Duplicar Produto</button>
-      <button class="btn-acao" onclick="stub('Imagens do Produto')"><kbd>6</kbd>-Imagens</button>
-      <button class="btn-acao" onclick="stub('Detalhes do Custo')"><kbd>0</kbd>-Detalhes do Custo</button>
-      <button class="btn-acao primario" onclick="detalhesEstoque()">Estoque das Filiais</button>
-    </div>
-
-    <div class="consulta">
-      <div class="radios"><b>Cons:</b>
-        <label><input type="radio" name="cons" onchange="consCampo='cod'; buscarProdutos()"> Código</label>
-        <label><input type="radio" name="cons" onchange="consCampo='nome'; buscarProdutos()" checked> Descrição</label>
-        <label><input type="radio" name="cons" onchange="consCampo='barras'; buscarProdutos()"> Cód de Barras</label>
-        <label style="margin-left:auto">
-          <input type="checkbox" checked onchange="exibirSemEstoque=this.checked; renderGridProd()">
-          Exibir sem estoque
-        </label>
-      </div>
-      <div class="linha-consulta">
-        <input type="text" id="in-cons" placeholder="Digite e tecle Enter para consultar… (use % como curinga)" autocomplete="off">
-        <button class="btn-acao" onclick="fecharJanela()">(ESC) Fechar</button>
-      </div>
-    </div>`, 980);
-
-  $('#in-cons').addEventListener('input', () => {
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(buscarProdutos, 400);
+  fecharJanela();
+  abrirProdutosHub({
+    apiFetch, toast, saldoVisto,
+    prodSelInicial: prodSel,
+    onSync(lista, sel) { PRODUTOS = lista; prodSel = sel; },
+    acoes: {
+      novo: abrirNovoProduto,
+      editar: abrirEditarProduto,
+      // "detalhesEstoque" nunca foi implementado (referência quebrada no código
+      // original); aponta para o stub em vez de quebrar ao clicar.
+      detalhesEstoque: () => stub('Detalhes de Estoque'),
+      similar: produtoSimilar, totaliza,
+      analisa: analisaProduto, precificar: janelaPrecificar, stub,
+    },
   });
-  $('#in-cons').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { clearTimeout(_searchTimer); buscarProdutos(); }
-  });
-
-  buscarProdutos();
-  setTimeout(() => $('#in-cons')?.focus(), 60);
 }
 
-async function buscarProdutos() {
-  const q = ($('#in-cons')?.value || '').trim();
-  const tb = document.querySelector('#grid-prod tbody');
-  if (!tb) return;
-
-  tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Carregando…</td></tr>';
-  try {
-    PRODUTOS = await apiFetch(`/produtos${q ? '?busca=' + encodeURIComponent(q) : ''}`);
-    if (!prodSel && PRODUTOS.length > 0) prodSel = PRODUTOS[0].id;
-    renderGridProd();
-  } catch (e) {
-    tb.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--vermelho);padding:18px">${e.message}</td></tr>`;
-  }
-}
-
-function renderGridProd() {
-  const q = ($('#in-cons')?.value || '').trim().toLowerCase();
-  const tb = document.querySelector('#grid-prod tbody');
-  if (!tb) return;
-
-  const lista = PRODUTOS.filter(p => {
-    if (!exibirSemEstoque && saldoVisto(p) === 0) return false;
-    if (!q) return true;
-    const campo = consCampo === 'cod' ? p.cod : (consCampo === 'barras' ? (p.barras || '') : p.nome);
-    return String(campo || '').toLowerCase().includes(q);
-  });
-
-  tb.innerHTML = lista.map(p => `
-    <tr class="${p.id === prodSel ? 'sel' : ''}" onclick="prodSel='${p.id}'; renderGridProd()">
-      <td class="num">${p.cod}</td>
-      <td>${p.fab || ''}</td>
-      <td>${p.nome}</td>
-      <td class="num ${saldoVisto(p) === 0 ? 'neg' : ''}">${saldoVisto(p).toFixed(2).replace('.', ',')}</td>
-      <td class="num">${brl(p.preco)}</td>
-    </tr>`).join('') ||
-    `<tr><td colspan="5" style="text-align:center;color:var(--cinza);padding:18px">Nenhum produto encontrado.</td></tr>`;
-
-  renderDetProd();
-}
-
-function renderDetProd() {
-  const p = PRODUTOS.find(x => x.id === prodSel);
-  const c = $('#det-prod');
-  if (!c || !p) return;
-  c.innerHTML = `
-    <div class="bloco-det" style="grid-column:1/-1">
-      <div class="lin"><span>Descrição…:</span><b style="color:var(--azul)">${p.nome}</b></div>
-    </div>
-    <div class="bloco-det"><div class="bloco-tit">Custo e Preços de Venda</div>
-      <div class="lin"><span>C. Aquisição..:</span><b>${brl(p.custo)}</b></div>
-      <div class="lin"><span>Markup……..:</span><b>${p.markup ? p.markup.toFixed(4).replace('.', ',') : '—'}</b></div>
-      <div class="lin"><span>Preço de Venda:</span><b>${brl(p.preco)}</b></div>
-      <div class="lin"><span>Preço Mínimo..:</span><b>${brl(p.precoMin)}</b></div>
-      <div class="lin"><span>% IPI / Sit.Trib:</span><b>${p.ipi != null ? p.ipi.toFixed(2) : '—'} / ${p.sit != null ? p.sit.toFixed(2) : '—'}</b></div>
-    </div>
-    <div class="bloco-det"><div class="bloco-tit">Datas e Localização</div>
-      <div class="lin"><span>Dt.Últ.Alt…:</span><b>${p.dtAlt || '—'}</b></div>
-      <div class="lin"><span>Data Cadastro:</span><b>${p.dtCad || '—'}</b></div>
-      <div class="lin"><span>Local:</span><b>—</b></div>
-    </div>
-    <div class="bloco-det"><div class="bloco-tit">Qtdes e Departamento</div>
-      <div class="lin"><span>Estoque Mínimo:</span><b>${(p.min || 0).toFixed(3).replace('.', ',')}</b></div>
-      <div class="lin"><span>Estoque Máximo:</span><b>${(p.max || 0).toFixed(3).replace('.', ',')}</b></div>
-      <div class="lin"><span>Grupo / Dpto:</span><b>${p.grupo || '—'}</b></div>
-    </div>
-    <div class="bloco-det"><div class="bloco-tit">Outras</div>
-      <div class="lin"><span>Unidade..:</span><b>${p.un || '—'}</b></div>
-      <div class="lin"><span>NCM……….:</span><b>${p.ncm || '—'}</b></div>
-      <div class="lin"><span>Cod.Barra:</span><b>${p.barras || '—'}</b></div>
-      <div class="lin"><span>CST/CSOSN:</span><b>${p.cst || '—'}</b></div>
-      <div class="lin"><span>CEST……:</span><b>${p.cest || '—'}</b></div>
-    </div>`;
-}
 
 // ─── Incluir / Alterar Produto ────────────────────────────────────────────────
 function abrirNovoProduto() {
@@ -1496,8 +1391,8 @@ Object.assign(window, {
   janelaEntradaSaida, janelaTransferencia, janelaAjuste,
   janelaReposicao, janelaRelEstoque, janelaHistorico, janelaFiliais,
   abrirNovaFilial, buscarCepFilial, salvarFilial,
-  trocarFilial, detalhesEstoque, produtoSimilar, totaliza, analisaProduto,
-  buscarProdutos, renderGridProd, mostraSaldoAj,
+  trocarFilial, produtoSimilar, totaliza, analisaProduto,
+  mostraSaldoAj,
   gravarES, gravarTransf, gravarAjuste, importarNfe,
   abrirNovoProduto, abrirEditarProduto,
   abrirCaixa, escanearPeloCelular,
